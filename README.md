@@ -277,6 +277,27 @@ $response = $client->get('/posts');
 
 ---
 
+### Consumindo a API publica do TMDB
+
+```php
+Router::get('/', function (Request $request, Response $response) {
+    
+    $baseUrl = 'https://api.themoviedb.org';
+
+    $token = 'SUA_CHAVE_SECRETA'; // Recomando usar no no arquivo .env
+
+    $httpClientInstance = HttpClient::make()
+                        ->baseUrl($baseUrl)
+                        ->withAuth('bearer', $token)
+                        ->get('/3/movie/11');
+
+    $data = $httpClientInstance->getBody();
+
+    $response->json($data);
+});
+```
+---
+
 ## 🛠️ Usando a Celestial CLI
 
 A **Celestial CLI** é uma ferramenta poderosa para agilizar o desenvolvimento. Veja os principais comandos:
