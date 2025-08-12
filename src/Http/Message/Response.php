@@ -101,7 +101,6 @@ class Response
     public function write(string $text, int $statusCode = 200): void 
     {
         $this->status($statusCode)
-             ->withContentType('text/plain')
              ->setContent($text)
              ->send($text);
     }
