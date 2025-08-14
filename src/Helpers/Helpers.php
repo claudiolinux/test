@@ -12,7 +12,6 @@ use Slenix\Libraries\Session;
 |--------------------------------------------|
 */
 
-// Constantes úteis
 define('BASE_PATH', __DIR__);
 define('SLENIX_START', microtime(true));
 define('DS', DIRECTORY_SEPARATOR);
@@ -102,41 +101,10 @@ if (!function_exists('route')):
     }
 endif;
 
-if (!function_exists('old')):
-    /**
-     * Recupera o valor antigo de um campo de formulário armazenado na sessão.
-     *
-     * @param string $key A chave do campo de formulário.
-     * @param mixed $default O valor padrão a ser retornado caso o campo não exista.
-     * @param string $flashKey A chave usada para armazenar os dados do formulário na sessão.
-     * @return mixed O valor antigo ou o valor padrão.
-     */
-    function old(string $key, mixed $default = null, string $flashKey = '_old_input'): mixed {
-        return Session::getFlash($flashKey . '.' . $key, $default);
-    }
-endif;
-
-if (!function_exists('flash_input')):
-    /**
-     * Armazena os dados do formulário como flash data na sessão.
-     *
-     * @param array $input Os dados do formulário a serem armazenados.
-     * @param string $flashKey A chave usada para armazenar os dados na sessão.
-     * @return void
-     */
-    function flash_input(array $input, string $flashKey = '_old_input'): void {
-        Session::flash($flashKey, $input);
-    }
-endif;
-
-
 Template::share('route', function (string $name, array $params = []): ?string {
     return Router::route($name, $params);
 });
 
-Template::share('old', function (string $key, mixed $default = null, string $flashKey = '_old_input'): mixed {
-    return Session::getFlash($flashKey . '.' . $key, $default);
-});
 
 Template::share('Session', [
     'has' => function (string $key): bool {
