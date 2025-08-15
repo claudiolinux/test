@@ -173,4 +173,18 @@ class Session
         self::start();
         return isset($_SESSION['_flash'][$key]);
     }
+
+    /**
+     * Salva os inputs antigos na sessão como flash data.
+     *
+     * @param array $data Array de dados, normalmente $_POST.
+     * @return void
+    */
+    public static function flashOldInput(array $data): void
+    {
+        self::start();
+        foreach ($data as $key => $value) {
+            $_SESSION['_flash']['_old_input_' . $key] = $value;
+        }
+    }
 }

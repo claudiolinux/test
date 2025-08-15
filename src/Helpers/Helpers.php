@@ -101,6 +101,16 @@ if (!function_exists('route')):
     }
 endif;
 
+if (!function_exists('old')) {
+    /**
+     * Retorna o valor antigo de um campo de formulário.
+     */
+    function old(string $key, mixed $default = null): string {
+        $value = \Slenix\Libraries\Session::getFlash('_old_input_' . $key, $default);
+        return (string) ($value ?? '');
+    }
+}
+
 Template::share('route', function (string $name, array $params = []): ?string {
     return Router::route($name, $params);
 });

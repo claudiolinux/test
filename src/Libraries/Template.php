@@ -187,6 +187,7 @@ class Template
             '/@endfor/' => '<?php endfor; ?>',
             '/@while\s*\(((?:[^()]*|\[^()]*\))*)\)/' => '<?php while($1): ?>',
             '/@endwhile/' => '<?php endwhile; ?>',
+            '/@old\s*\(((?:[^()]*|\([^()]*\))*)\)/' => '<?php echo htmlspecialchars(old($1), ENT_QUOTES, \'UTF-8\'); ?>',
             '/@csrf/' => '<?php $csrf = \Slenix\Http\Auth\Csrf::generateToken(); ?><input type="hidden" name="_csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, \'UTF-8\') ?>"><meta name="csrf-token" content="<?= htmlspecialchars($csrf, ENT_QUOTES, \'UTF-8\') ?>">',
             '/@continue(\s*\(((?:[^()]*|\[^()]*\))*)\))?/' => '<?php if$1 continue; ?>',
             '/@break(\s*\(((?:[^()]*|\[^()]*\))*)\))?/' => '<?php if$1 break; ?>',
