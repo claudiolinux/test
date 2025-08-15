@@ -975,7 +975,6 @@ class Request
                 return $language;
             }
             
-            // Verifica idioma base (ex: 'pt' para 'pt-BR')
             $baseLang = substr($language, 0, 2);
             if (in_array($baseLang, $available)) {
                 return $baseLang;

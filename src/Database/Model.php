@@ -9,12 +9,6 @@
  * | Integra QueryBuilder para consultas fluentes e elegantes.
  * | Todas as classes modelo devem estender esta classe e definir a propriedade $table.
  * |
- * | Exemplos de uso:
- * | - User::where('name', '=', 'João')->get()
- * | - User::where('age', '>', 18)->orderBy('name')->limit(10)->get()
- * | - User::select(['name', 'email'])->where('active', '=', 1)->first()
- * | - User::whereIn('id', [1,2,3])->orderBy('created_at', 'DESC')->get()
- * |
  * | @package Slenix\Database
  * | @author Slenix
  * | @version 2.0
@@ -195,7 +189,7 @@ abstract class Model
     }
 
     /**
-     * Preenche os atributos do modelo a partir de um array
+     * Método público para acessar fill
      * 
      * @param array $data Dados para preencher
      * @return $this
@@ -352,6 +346,19 @@ abstract class Model
     public static function find($id): ?self
     {
         return static::where(static::make()->primaryKey, '=', $id)->first();
+    }
+
+    /**
+     * Método estático melhorado para get() que retorna apenas o primeiro resultado
+     * quando você quer apenas um registro
+     * 
+     * @param string $column Nome da coluna
+     * @param mixed $value Valor para comparação
+     * @return static|null Primeira instância do modelo ou null
+     */
+    public static function firstWhere(string $column, $value): ?self
+    {
+        return static::where($column, '=', $value)->first();
     }
 
     /**

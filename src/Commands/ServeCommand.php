@@ -7,7 +7,7 @@ namespace Slenix\Commands;
 class ServeCommand extends Command
 {
     private array $args;
-    private const DEFAULT_PORT = 8000;
+    private const DEFAULT_PORT = 8080;
 
     public function __construct(array $args)
     {

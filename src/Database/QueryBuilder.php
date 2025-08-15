@@ -10,7 +10,7 @@
  * |
  * | @package Slenix\Database
  * | @author Slenix
- * | @version 1.0
+ * | @version 1.1 - Melhorado para retornar objetos modelo
  */
 
 declare(strict_types=1);
@@ -537,7 +537,7 @@ class QueryBuilder
     }
 
     /**
-     * Executa a consulta e retorna todos os registros
+     * Executa a consulta e retorna todos os registros como instâncias do modelo
      * 
      * @return array Array de instâncias do modelo
      */
@@ -549,12 +549,20 @@ class QueryBuilder
         $stmt->execute($this->bindings);
         
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $results = [];
 
-        return $data;
+        // Converte cada linha em uma instância do modelo
+        foreach ($data as $row) {
+            $model = new $this->modelClass();
+            $model->fill($row);
+            $results[] = $model;
+        }
+
+        return $results;
     }
 
     /**
-     * Executa a consulta e retorna o primeiro registro
+     * Executa a consulta e retorna o primeiro registro como instância do modelo
      * 
      * @return object|null Instância do modelo ou null se não encontrado
      */
@@ -563,11 +571,24 @@ class QueryBuilder
         $originalLimit = $this->limit;
         $this->limit = 1;
         
-        $results = $this->get();
+        $sql = $this->buildSelectSql();
+        
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($this->bindings);
+        
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
         
         $this->limit = $originalLimit;
         
-        return $results[0] ?? null;
+        if (!$data) {
+            return null;
+        }
+
+        // Cria uma instância do modelo e preenche com os dados
+        $model = new $this->modelClass();
+        $model->fill($data);
+        
+        return $model;
     }
 
     /**

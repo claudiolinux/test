@@ -384,7 +384,7 @@ class Response
      * @param int $statusCode Código de status HTTP
      * @return mixed
      */
-    public function render(string $template, array $data = [], int $statusCode = 200): mixed 
+    public function render(string $template, array $data = [], int $statusCode = 200)
     {
         $this->status($statusCode);
         
