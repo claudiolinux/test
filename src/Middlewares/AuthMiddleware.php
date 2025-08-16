@@ -15,6 +15,7 @@ namespace Slenix\Middlewares;
 use Slenix\Http\Message\Middleware;
 use Slenix\Http\Message\Request;
 use Slenix\Http\Message\Response;
+use Slenix\Libraries\Session;
 
 class AuthMiddleware implements Middleware
 {
@@ -28,12 +29,8 @@ class AuthMiddleware implements Middleware
      */
     public function handle(Request $request, Response $response, array $param): bool
     {
-        // Garante que a sessão está ativa
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
 
-        if (!isset($_SESSION['user_id'])) {
+        if (!Session::has('user_id')) {
             $response->status(401)->json(['error' => 'Unauthorized: User not authenticated']);
             return false;
         }

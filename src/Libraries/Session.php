@@ -15,9 +15,6 @@ declare(strict_types=1);
 
 namespace Slenix\Libraries;
 
-/**
- * Classe para gerenciar a sessão do usuário com segurança.
- */
 class Session
 {
     /**
@@ -28,7 +25,16 @@ class Session
     public static function start(): void
     {
         if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
-            session_start();
+            session_start(
+                [
+                    'cookie_secure' => isset($_SERVER['HTTPS']),
+                    'cookie_httponly' => true,
+                    'cookie_samesite' => 'Lax',
+                    'use_strict_mode' => true,
+                    'use_cookies' => true,
+                    'use_only_cookies' => true,
+                ]
+            );
         }
     }
 
@@ -179,7 +185,7 @@ class Session
      *
      * @param array $data Array de dados, normalmente $_POST.
      * @return void
-    */
+     */
     public static function flashOldInput(array $data): void
     {
         self::start();

@@ -35,8 +35,11 @@ class AppFactory
     {
         $this->startTime = $startTime;
         
-        // Inicia a sessão para CSRF, Flash, etc.
+        Session::start(); // Inicia a sessão
+
+        // Inicia a sessão para para os templates.
         class_alias(Session::class, 'Session');
+
 
         // Carrega as variáveis de ambiente
         try {

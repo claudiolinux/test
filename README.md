@@ -104,8 +104,10 @@ Router::get('/user/{id}', function ($request, $response, $params) {
 Organize rotas relacionadas com prefixos ou middlewares:
 
 ```php
+use Slenix\Http\Message\Router;
+
 Router::group(['prefix' => '/api'], function () {
-    Router::get('/users', function ($request, $response) {
+    Router::get('/users', function (Request $request, Response $response) {
         $allUsers = User::all();
         return $response->json([
             'users' => $allUsers
@@ -127,7 +129,7 @@ use Slenix\Middlewares\AuthMiddleware;
 Router::get('/profile/{user_id}', function($request, $response, $param){
     $id = $param['user_id'];
 
-    $user_id = User::where('id', '=', $id)->get();
+    $user_id = User::where('id',  $id)->first();
 
     if(!$user_id):
         $response->status(404)->json(['message' => 'User not Exist']);
