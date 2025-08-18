@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Slenix\Database;
 
 use PDO, PDOException;
+use Slenix\Exceptions\ErrorHandler;
 
-class Database {
+class Database extends ErrorHandler {
     private static $connection = null;
     private ?object $pdo;
 
@@ -24,7 +25,7 @@ class Database {
                 PDO::ATTR_EMULATE_PREPARES => false,
             ]);
         } catch (PDOException $e) {
-            die('Falha na conexão: ' . $e->getMessage());
+            $this->handleException($e);
         }
     }
 

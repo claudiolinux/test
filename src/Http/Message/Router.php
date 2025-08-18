@@ -9,6 +9,7 @@
 | verbos HTTP, agrupamento de rotas com prefixos e middlewares, e nomeação de rotas.
 |
 */
+
 declare(strict_types=1);
 
 namespace Slenix\Http\Message;
@@ -278,6 +279,15 @@ class Router
         }
 
         $response->status(404);
-        require_once __DIR__ . '/../../Helpers/errors/404.php';
+        $dirpathErros = __DIR__ . '/../../../views/errors/404.php';
+        $dirpathErro = __DIR__ . '/../../../views/error/404.php';
+
+        if (file_exists($dirpathErros)):
+            require_once $dirpathErros;
+        elseif (file_exists($dirpathErro)):
+            require_once $dirpathErro;
+        else:
+            require_once __DIR__ . '/../../Helpers/errors/404.php';
+        endif;
     }
 }

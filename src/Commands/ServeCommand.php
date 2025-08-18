@@ -24,7 +24,7 @@ class ServeCommand extends Command
         }
 
         $host = '127.0.0.1';
-        $publicDir = PUBLIC_PATH;
+        $publicDir = __DIR__ . '/../../public';
 
         if (!is_dir($publicDir)) {
             self::warning('Diretório público não encontrado. Criando...');

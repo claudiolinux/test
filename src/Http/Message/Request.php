@@ -10,11 +10,14 @@
 | arquivos, cookies, cabeçalhos, IP do cliente e user agent.
 |
 */
+
 declare(strict_types=1);
 
 namespace Slenix\Http\Message;
 
 use InvalidArgumentException;
+use Slenix\Exceptions\UploadException;
+use Slenix\Http\Message\Upload;
 
 /**
  * Classe que representa um pedido HTTP.
@@ -29,6 +32,7 @@ class Request
     private array $params = [];
     private array $server = [];
     private array $headers = [];
+    protected array $jsonData = [];
     private array $attributes = [];
     private array $parsedBody = [];
     private array $queryParams = [];
@@ -41,6 +45,7 @@ class Request
      */
     public function __construct(array $params = [])
     {
+        $this->parseJson();
         $this->params = $params;
         $this->server = $_SERVER;
         $this->queryParams = $_GET;
@@ -92,8 +97,8 @@ class Request
     public function method(): string
     {
         // Verifica método override via header ou campo oculto
-        $overrideMethod = $this->getHeader('X-HTTP-Method-Override') 
-            ?? $this->input('_method') 
+        $overrideMethod = $this->getHeader('X-HTTP-Method-Override')
+            ?? $this->input('_method')
             ?? null;
 
         if ($overrideMethod && $this->isMethod('POST')) {
@@ -133,7 +138,7 @@ class Request
         $scheme = $this->isSecure() ? 'https' : 'http';
         $host = $this->getHost();
         $uri = $this->fullUri();
-        
+
         return "{$scheme}://{$host}{$uri}";
     }
 
@@ -148,6 +153,25 @@ class Request
     }
 
     /**
+     * Detecta se o body é JSON e guarda os dados
+     *
+     * @return void
+     */
+    protected function parseJson(): void
+    {
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+
+        if (stripos($contentType, 'application/json') !== false) {
+            $raw = file_get_contents('php://input');
+            $decoded = json_decode($raw, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $this->jsonData = $decoded;
+            }
+        }
+    }
+
+    /**
      * Retorna um valor de entrada (POST, GET ou corpo parseado).
      *
      * @param string $key A chave do valor de entrada.
@@ -156,11 +180,19 @@ class Request
      */
     public function input(string $key, mixed $default = null): mixed
     {
-        // Busca primeiro no corpo parseado, depois POST, depois GET
-        return $this->parsedBody[$key] 
-            ?? $_POST[$key] 
-            ?? $this->queryParams[$key] 
-            ?? $default;
+        if (array_key_exists($key, $this->jsonData)) {
+            return $this->jsonData[$key];
+        }
+
+        if (isset($_POST[$key])) {
+            return $_POST[$key];
+        }
+
+        if (isset($_GET[$key])) {
+            return $_GET[$key];
+        }
+
+        return $default;
     }
 
     /**
@@ -277,25 +309,51 @@ class Request
     }
 
     /**
-     * Retorna informações sobre um arquivo enviado.
+     * Retorna uma nova instância da classe Upload para o arquivo especificado.
      *
-     * @param string $key A chave do arquivo.
-     * @return ?array Informações do arquivo ou null.
+     * Este método encapsula o array global $_FILES, proporcionando uma interface
+     * orientada a objetos para o arquivo.
+     *
+     * @param string $key A chave do arquivo no array $_FILES.
+     * @return Upload
+     * @throws UploadException Se ocorrer um erro no upload do PHP.
      */
-    public function file(string $key): ?array
+    public function file(string $key): Upload
     {
-        return $this->uploadedFiles[$key] ?? null;
+        if (!$this->hasFile($key)) {
+            throw new UploadException(UPLOAD_ERR_NO_FILE);
+        }
+
+        // Retorna uma instância da nossa classe Upload, que lida com validações e movimentação.
+        return new Upload($_FILES[$key]);
     }
 
     /**
      * Retorna todos os arquivos enviados.
      *
-     * @return array
+     * @return array<string, Upload> Uma lista de objetos Upload.
      */
     public function files(): array
     {
-        return $this->uploadedFiles ?? [];
+        $files = [];
+        if (!empty($_FILES)) {
+            foreach ($_FILES as $key => $fileData) {
+                if ($fileData['error'] !== UPLOAD_ERR_NO_FILE) {
+                    // Verifica se é um upload de múltiplos arquivos
+                    if (is_array($fileData['name'])) {
+                        $normalizedFiles = $this->normalizeNestedFiles($fileData);
+                        foreach ($normalizedFiles as $index => $normalizedFile) {
+                            $files[$key . '_' . $index] = new Upload($normalizedFile);
+                        }
+                    } else {
+                        $files[$key] = new Upload($fileData);
+                    }
+                }
+            }
+        }
+        return $files;
     }
+
 
     /**
      * Verifica se um arquivo foi enviado.
@@ -305,8 +363,7 @@ class Request
      */
     public function hasFile(string $key): bool
     {
-        $file = $this->file($key);
-        return $file && $file['error'] === UPLOAD_ERR_OK && $file['size'] > 0;
+        return isset($_FILES[$key]) && is_array($_FILES[$key]) && $_FILES[$key]['error'] !== UPLOAD_ERR_NO_FILE;
     }
 
     /**
@@ -352,7 +409,7 @@ class Request
             if (!empty($this->server[$header])) {
                 $ips = explode(',', $this->server[$header]);
                 $ip = trim($ips[0]);
-                
+
                 if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
                     return $ip;
                 }
@@ -588,7 +645,7 @@ class Request
     private function parsedBody(): void
     {
         $input = file_get_contents('php://input');
-        
+
         if (empty($input)) {
             $this->parsedBody = [];
             return;
@@ -599,7 +656,7 @@ class Request
         if (str_contains($contentType, 'application/json')) {
             $decoded = json_decode($input, true);
             $this->parsedBody = $decoded ?? [];
-            
+
             if (json_last_error() !== JSON_ERROR_NONE) {
                 throw new InvalidArgumentException('JSON inválido: ' . json_last_error_msg());
             }
@@ -623,7 +680,7 @@ class Request
     {
         libxml_use_internal_errors(true);
         $xml = simplexml_load_string($input, 'SimpleXMLElement', LIBXML_NOCDATA);
-        
+
         if ($xml !== false) {
             $this->parsedBody = json_decode(json_encode($xml), true);
         } else {
@@ -639,7 +696,7 @@ class Request
     private function parseUploadedFiles(): void
     {
         $this->uploadedFiles = [];
-        
+
         if (empty($_FILES)) {
             return;
         }
@@ -682,17 +739,15 @@ class Request
     private function normalizeNestedFiles(array $files): array
     {
         $normalized = [];
-        
         foreach ($files['name'] as $index => $name) {
-            $normalized[$index] = $this->normalizeFile([
+            $normalized[$index] = [
                 'name' => $name,
                 'type' => $files['type'][$index] ?? null,
                 'size' => $files['size'][$index],
                 'tmp_name' => $files['tmp_name'][$index],
                 'error' => $files['error'][$index],
-            ]);
+            ];
         }
-        
         return $normalized;
     }
 
@@ -707,14 +762,14 @@ class Request
         if (!file_exists($filePath)) {
             return null;
         }
-        
+
         if (function_exists('finfo_file')) {
             $finfo = finfo_open(FILEINFO_MIME_TYPE);
             $mimeType = finfo_file($finfo, $filePath);
             finfo_close($finfo);
             return $mimeType ?: null;
         }
-        
+
         return mime_content_type($filePath) ?: null;
     }
 
@@ -750,7 +805,7 @@ class Request
         if ($key === null) {
             return $this->server;
         }
-        
+
         return $this->server[$key] ?? $default;
     }
 
@@ -763,13 +818,13 @@ class Request
     public function validate(array $required): array
     {
         $missing = [];
-        
+
         foreach ($required as $field) {
             if (!$this->filled($field)) {
                 $missing[] = $field;
             }
         }
-        
+
         return $missing;
     }
 
@@ -784,11 +839,11 @@ class Request
     public function sanitize(string $key, string $filter = 'string', mixed $default = null): mixed
     {
         $value = $this->input($key, $default);
-        
+
         if ($value === null) {
             return $default;
         }
-        
+
         return match ($filter) {
             'string' => filter_var($value, FILTER_SANITIZE_STRING),
             'email' => filter_var($value, FILTER_SANITIZE_EMAIL),
@@ -820,19 +875,19 @@ class Request
     public function isFromOrigin(string|array $origins): bool
     {
         $referer = $this->referer();
-        
+
         if (!$referer) {
             return false;
         }
-        
+
         $origins = is_array($origins) ? $origins : [$origins];
-        
+
         foreach ($origins as $origin) {
             if (str_starts_with($referer, $origin)) {
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -845,16 +900,26 @@ class Request
     {
         $userAgent = strtolower($this->userAgent() ?? '');
         $botSignatures = [
-            'bot', 'crawl', 'spider', 'slurp', 'yahoo', 'google', 'bing',
-            'facebook', 'twitter', 'whatsapp', 'telegram', 'baidu'
+            'bot',
+            'crawl',
+            'spider',
+            'slurp',
+            'yahoo',
+            'google',
+            'bing',
+            'facebook',
+            'twitter',
+            'whatsapp',
+            'telegram',
+            'baidu'
         ];
-        
+
         foreach ($botSignatures as $signature) {
             if (str_contains($userAgent, $signature)) {
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -866,11 +931,11 @@ class Request
     public function getDeviceInfo(): array
     {
         $userAgent = $this->userAgent() ?? '';
-        
+
         $isMobile = preg_match('/Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i', $userAgent);
         $isTablet = preg_match('/iPad|Android.*Tablet/i', $userAgent);
         $isDesktop = !$isMobile && !$isTablet;
-        
+
         // Detecta o sistema operacional
         $os = 'Unknown';
         if (preg_match('/Windows NT/i', $userAgent)) $os = 'Windows';
@@ -878,7 +943,7 @@ class Request
         elseif (preg_match('/Linux/i', $userAgent)) $os = 'Linux';
         elseif (preg_match('/Android/i', $userAgent)) $os = 'Android';
         elseif (preg_match('/iPhone|iPad|iPod/i', $userAgent)) $os = 'iOS';
-        
+
         // Detecta o navegador
         $browser = 'Unknown';
         if (preg_match('/Chrome/i', $userAgent)) $browser = 'Chrome';
@@ -886,7 +951,7 @@ class Request
         elseif (preg_match('/Safari/i', $userAgent)) $browser = 'Safari';
         elseif (preg_match('/Edge/i', $userAgent)) $browser = 'Edge';
         elseif (preg_match('/Opera/i', $userAgent)) $browser = 'Opera';
-        
+
         return [
             'is_mobile' => (bool) $isMobile,
             'is_tablet' => (bool) $isTablet,
@@ -936,13 +1001,13 @@ class Request
     {
         $languages = [];
         $acceptLanguage = $this->getHeader('Accept-Language', '');
-        
+
         if (!$acceptLanguage) {
             return $languages;
         }
-        
+
         $parts = explode(',', $acceptLanguage);
-        
+
         foreach ($parts as $part) {
             $part = trim($part);
             if (preg_match('/([a-z-]+)(?:;q=([0-9.]+))?/i', $part, $matches)) {
@@ -951,7 +1016,7 @@ class Request
                 $languages[$language] = $quality;
             }
         }
-        
+
         arsort($languages);
         return array_keys($languages);
     }
@@ -965,22 +1030,22 @@ class Request
     public function getPreferredLanguage(array $available = []): ?string
     {
         $acceptable = $this->getAcceptableLanguages();
-        
+
         if (empty($available)) {
             return $acceptable[0] ?? null;
         }
-        
+
         foreach ($acceptable as $language) {
             if (in_array($language, $available)) {
                 return $language;
             }
-            
+
             $baseLang = substr($language, 0, 2);
             if (in_array($baseLang, $available)) {
                 return $baseLang;
             }
         }
-        
+
         return null;
     }
 
@@ -1011,29 +1076,29 @@ class Request
         array $headers = []
     ): self {
         $request = new self();
-        
+
         // Simula dados do servidor para teste
         $request->server = array_merge($_SERVER, [
             'REQUEST_METHOD' => strtoupper($method),
             'REQUEST_URI' => $uri,
             'PATH_INFO' => parse_url($uri, PHP_URL_PATH),
         ]);
-        
+
         // Define headers
         foreach ($headers as $name => $value) {
             $headerKey = 'HTTP_' . str_replace('-', '_', strtoupper($name));
             $request->server[$headerKey] = $value;
         }
-        
+
         // Define dados baseado no método
         if (in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'])) {
             $request->parsedBody = $data;
         } else {
             $request->queryParams = $data;
         }
-        
+
         $request->parseHeaders();
-        
+
         return $request;
     }
 
