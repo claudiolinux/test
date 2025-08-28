@@ -1,12 +1,10 @@
 <!DOCTYPE html>
 <html lang="pt-AO">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="shortcut icon" href="/logo.svg" type="image/x-icon">
-    <title>Welcome Slenix</title>
-    <style>
+    <title>Welcome to Slenix</title>
+<style>
         * {
             margin: 0;
             padding: 0;
@@ -259,5 +257,4 @@ ____) | |  __/ | | | |>  <
             </div>
         </div>            
 </body>
-
 </html>

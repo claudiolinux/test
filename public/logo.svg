@@ -1,15 +1,31 @@
-<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Hexágono de fundo com gradiente -->
-  <path d="M50 10L86.6 30V70L50 90L13.4 70V30L50 10Z" fill="url(#grad1)"/>
-  <!-- Linhas dinâmicas formando um "S" -->
-  <path d="M35 30C35 20 45 15 50 20C55 25 65 35 65 50C65 65 55 75 50 80C45 85 35 80 35 70C35 60 45 55 50 60C55 65 65 75 65 80" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
-  <!-- Texto "Slenix" -->
-  <text x="50" y="95" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Slenix</text>
-  <!-- Definição do gradiente -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600" role="img" aria-labelledby="t1 d1">
+  <title id="t1">Slenix — Cristal Geométrico</title>
+  <desc id="d1">Ícone low-poly em forma de cristal/origami, com facetas em gradiente.</desc>
+
   <defs>
-    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#00CED1;stop-opacity:1"/>
-      <stop offset="100%" style="stop-color:#8A2BE2;stop-opacity:1"/>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0FE3C6"/>
+      <stop offset="50%" stop-color="#27C6F9"/>
+      <stop offset="100%" stop-color="#7A42F4"/>
     </linearGradient>
+    <linearGradient id="g2" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#9BE7FF"/>
+      <stop offset="100%" stop-color="#5D3BFF"/>
+    </linearGradient>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-opacity="0.18"/>
+    </filter>
   </defs>
+
+  <!-- Cristal central (várias facetas) -->
+  <g transform="translate(300,300)" filter="url(#shadow)">
+    <!-- base esquerda -->
+    <path d="M-10 140 L-110 20 L-20 -170 L30 -130 Z" fill="url(#g1)"/>
+    <!-- base direita -->
+    <path d="M10 140 L110 20 L20 -170 L-30 -130 Z" fill="url(#g2)"/>
+    <!-- faceta frontal -->
+    <path d="M-20 -170 L20 -170 L110 20 L-110 20 Z" fill="#ffffff" opacity="0.08"/>
+    <!-- brilho superior -->
+    <polygon points="-10 -160 0 -180 10 -160 0 -150" fill="#ffffff" opacity="0.9"/>
+  </g>
 </svg>

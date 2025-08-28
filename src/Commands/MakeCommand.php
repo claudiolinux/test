@@ -23,7 +23,7 @@ class MakeCommand extends Command
 
         $modelName = ucfirst($this->args[2]);
         $tableName = strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $modelName)) . 's';
-        $filePath = __DIR__ .'/../../app/Models/' . $modelName . '.php';
+        $filePath = __DIR__ . '/../../app/Models/' . $modelName . '.php';
 
         $this->ensureFileDoesNotExist($filePath, $modelName, 'Model');
 
@@ -56,7 +56,7 @@ EOT;
         }
 
         $controllerName = ucfirst($this->args[2]);
-        $filePath = __DIR__ .'/../../app/Controllers/' . $controllerName . '.php';
+        $filePath = __DIR__ . '/../../app/Controllers/' . $controllerName . '.php';
 
         $this->ensureFileDoesNotExist($filePath, $controllerName, 'Controller');
 
@@ -94,6 +94,74 @@ EOT;
             self::error("Não foi possível criar o diretório {$dir}.");
             exit(1);
         }
+    }
+
+    public function makeMiddleware(): void
+    {
+        if (count($this->args) < 3) {
+            self::error('Nome do middleware é obrigatório.');
+            self::info('Exemplo: php celestial make:middleware Auth');
+            exit(1);
+        }
+
+        $middlewareName = ucfirst($this->args[2]);
+        if (!str_ends_with($middlewareName, 'Middleware')) {
+            $middlewareName .= 'Middleware';
+        }
+
+        $filePath = __DIR__ . '/../Middlewares/' . $middlewareName . '.php';
+
+        $this->ensureFileDoesNotExist($filePath, $middlewareName, 'Middleware');
+
+        $template = <<<EOT
+<?php
+/*
+|--------------------------------------------------------------------------
+| Classe {$middlewareName}
+|--------------------------------------------------------------------------
+|
+| Este middleware [descreva a funcionalidade do middleware aqui].
+|
+*/
+
+declare(strict_types=1);
+
+namespace Slenix\Middlewares;
+
+use Slenix\Http\Message\Middleware;
+use Slenix\Http\Message\Request;
+use Slenix\Http\Message\Response;
+use Slenix\Libraries\Session;
+
+class {$middlewareName} implements Middleware
+{
+    /**
+     * Handle da requisição através do middleware.
+     *
+     * @param Request \$request A requisição HTTP.
+     * @param Response \$response A resposta HTTP.
+     * @param array \$params Parâmetros da rota.
+     * @return bool Retorna true para continuar, false para interromper.
+     */
+    public function handle(Request \$request, Response \$response, array \$params): bool
+    {
+        // Lógica do middleware aqui
+        
+        // Exemplo: verificar alguma condição
+        // if (!\$someCondition) {
+        //     \$response->status(403)->json(['error' => 'Forbidden']);
+        //     return false;
+        // }
+
+        return true; // Continua a execução
+    }
+}
+EOT;
+
+        $this->createFile($filePath, $template, $middlewareName, 'Middleware');
+
+        self::info('Para usar este middleware, registre-o nas suas rotas:');
+        self::info("Route::get('/exemplo', [Controller::class, 'method'])->middleware('{$middlewareName}');");
     }
 
     private function createFile(string $path, string $content, string $name, string $type): void

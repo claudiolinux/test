@@ -1,16 +1,15 @@
 <p align="center">
-  <img src="public/logo.svg" alt="Slenix Logo" width="150">
+  <img src="public/logo.svg" alt="Slenix Logo" width="250">
 </p>
 
 <h1 align="center">🌌 Slenix Framework</h1>
 
-
 <p align="center">Um micro framework PHP leve, elegante e poderoso baseado no padrão MVC</p>
 
 <p align="center">
-  <a href="https://github.com/claudiovictors/slenix.git"><img src="https://img.shields.io/github/stars/claudiovictors/slenix?style=social" alt="GitHub Stars"></a>
+  <a href="https://github.com/claudiovictors/slenix"><img src="https://img.shields.io/github/stars/claudiovictors/slenix?style=social" alt="GitHub Stars"></a>
   <a href="https://packagist.org/packages/slenix/slenix"><img src="https://img.shields.io/packagist/v/slenix/slenix.svg" alt="Packagist Version"></a>
-  <a href="https://github.com/claudiovictors/slenix.git/blob/main/LICENSE"><img src="https://img.shields.io/github/license/claudiovictors/slenix" alt="License"></a>
+  <a href="https://github.com/claudiovictors/slenix/blob/main/LICENSE"><img src="https://img.shields.io/github/license/claudiovictors/slenix" alt="License"></a>
   <img src="https://img.shields.io/badge/PHP-8.0%2B-blue" alt="PHP Version">
 </p>
 
@@ -18,32 +17,34 @@
 
 ## 📖 Sobre o Slenix
 
-O **Slenix Framework** é um micro framework PHP projetado para desenvolvedores que buscam **simplicidade**, **desempenho** e **flexibilidade**. Baseado na arquitetura **MVC (Model-View-Controller)**, ele oferece ferramentas essenciais para construir aplicações web e APIs de forma rápida e eficiente.
+O **Slenix Framework** é um micro framework PHP projetado para desenvolvedores que buscam **simplicidade**, **desempenho** e **flexibilidade**.  
+Baseado na arquitetura **MVC (Model-View-Controller)**, ele oferece ferramentas essenciais para construir aplicações web e APIs de forma rápida e eficiente.
 
 ### ✨ Recursos Principais
 
 - 🚀 **Roteamento Simples**: Defina rotas dinâmicas com parâmetros e grupos.
 - 🗃️ **ORM Integrado**: Gerencie bancos de dados com modelos intuitivos.
-- 📄 **Template Luna**: Crie views dinâmicas com sintaxe limpa e poderosa.
+- 🎨 **Template Luna**: Crie views dinâmicas com sintaxe limpa e poderosa.
 - 🛠️ **Celestial CLI**: Automatize a criação de Models, Controllers e inicialização do servidor.
 - ⚡ **Leve e Rápido**: Sem dependências pesadas, ideal para projetos de pequeno a médio porte.
 - 📤 **Upload de Arquivos**: Suporte simplificado para upload de arquivos.
 - 🌐 **Requisições HTTP**: Integração robusta com a classe `HttpClient` para consumir APIs.
+- 🔒 **Middlewares**: Controle de autenticação, CSRF, JWT e muito mais.
 
 ---
 
 ## 📋 Pré-requisitos
 
-- **PHP**: 8.0 ou superior
-- **Extensão PDO**: Habilitada (necessária para o ORM)
-- **Composer**: Recomendado para autoload
-- **Servidor Web**: Apache, Nginx ou servidor embutido do PHP (`celestial serve`)
+- 🐘 **PHP**: 8.0 ou superior
+- 🗄️ **Extensão PDO**: Habilitada (necessária para o ORM)
+- 📦 **Composer**: Recomendado para autoload
+- 🌍 **Servidor Web**: Apache, Nginx ou servidor embutido do PHP (`celestial serve`)
 
 ---
 
 ## ⚙️ Instalação
 
-### 1. Instalar via Composer
+### 1️⃣ Instalar via Composer
 
 ```bash
 composer require slenix/slenix
@@ -81,20 +82,46 @@ Acesse `http://127.0.0.1:8080` no navegador para ver a página de boas-vindas.
 
 ## 🚀 Primeiros Passos
 
-### 📜 Definindo Rotas
+### 🛣️ Definindo Rotas
 
 Edite o arquivo `routes/web.php` para criar rotas simples e dinâmicas:
 
 ```php
 use Slenix\Http\Message\Router;
 
-Router::get('/', function($request, $response, $param){
-    $response->write('Hello, Slenix');
-})->name('page.home');
+// Rota simples GET
+Router::get('/', function(Request $request, Response $response) {
+    return view('welcome');
+})->name('home');
 
-Router::get('/user/{id}', function ($request, $response, $params) {
-    $response->json(['id' => $params['id'], 'name' => 'Slenix']);
-});
+// Rota com parâmetros obrigatórios
+Router::get('/user/{id}', function(Request $request, Response $response, array $params) {
+    $userId = $params['id'];
+    return view('user.profile', ['user_id' => $userId]);
+})->name('user.profile');
+
+// Rota com parâmetros opcionais
+Router::get('/posts/{category?}', function(Request $request, Response $response, array $params) {
+    $category = $params['category'] ?? 'all';
+    return view('posts.index', ['category' => $category]);
+})->name('posts.index');
+```
+
+---
+
+### 📦 ROTAS COM CONTROLLERS
+```php
+Router::get('/users', [UserController::class, 'index'])->name('users.index');
+
+// Rota POST com middleware específico
+Router::post('/users', [UserController::class, 'store'])
+    ->middleware('auth')
+    ->name('users.store');
+
+// Múltiplos middlewares
+Router::get('/admin/dashboard', [UserController::class, 'dashboard'])
+    ->middleware(['auth', 'admin'])
+    ->name('admin.dashboard');
 ```
 
 ---
@@ -106,13 +133,38 @@ Organize rotas relacionadas com prefixos ou middlewares:
 ```php
 use Slenix\Http\Message\Router;
 
-Router::group(['prefix' => '/api'], function () {
-    Router::get('/users', function (Request $request, Response $response) {
-        $allUsers = User::all();
-        return $response->json([
-            'users' => $allUsers
-        ]);
+Router::group(['prefix' => '/api/v1'], function() {
+    Router::get('/users', [UserController::class, 'apiIndex']);
+    Router::post('/users', [UserController::class, 'apiStore']);
+    Router::get('/users/{id}', [UserController::class, 'apiShow']);
+});
+
+// Grupo com middleware
+Router::group(['middleware' => 'auth'], function() {
+    Router::get('/profile', [UserController::class, 'profile']);
+    Router::put('/profile', [UserController::class, 'updateProfile']);
+    Router::get('/settings', [UserController::class, 'settings']);
+});
+
+// Grupo com prefixo e middleware
+Router::group(['prefix' => '/admin', 'middleware' => ['auth', 'admin']], function() {
+    Router::get('/dashboard', [AdminController::class, 'dashboard']);
+    Router::get('/users', [AdminController::class, 'users']);
+    Router::get('/reports', [AdminController::class, 'reports']);
+    
+    // Sub-grupo
+    Router::group(['prefix' => '/settings'], function() {
+        Router::get('/general', [AdminController::class, 'generalSettings']);
+        Router::get('/security', [AdminController::class, 'securitySettings']);
     });
+});
+
+// Grupo apenas com middleware (sem prefixo)
+Router::middleware('guest', function() {
+    Router::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Router::post('/login', [AuthController::class, 'login']);
+    Router::get('/register', [AuthController::class, 'showRegister'])->name('register');
+    Router::post('/register', [AuthController::class, 'register']);
 });
 ```
 
@@ -126,18 +178,23 @@ Proteja suas rotas com middlewares personalizados:
 use Slenix\Http\Message\Router;
 use Slenix\Middlewares\AuthMiddleware;
 
-Router::get('/profile/{user_id}', function($request, $response, $param){
-    $id = $param['user_id'];
+// Middleares para prote CSRF
+Router::post('/login', [UserController::class, 'login'])
+        ->middleware('csrf');
 
-    $user_id = User::where('id',  $id)->first();
+Router::get('/login', [UserController::class, 'autenticate'])
+        ->middleware('jwt');
 
-    if(!$user_id):
-        $response->status(404)->json(['message' => 'User not Exist']);
-    endif;
+Router::get('/admin/dashboard', [UserController::class, 'dashboard'])
+    ->middleware(['auth', 'admin'])
+    ->name('admin.dashboard');
 
-    $response->status(200)->json(['user' => $user_id]);
-
-}, [AuthMiddleware::class]);
+Router::middleware('guest', function() {
+    Router::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Router::post('/login', [AuthController::class, 'login']);
+    Router::get('/register', [AuthController::class, 'showRegister'])->name('register');
+    Router::post('/register', [AuthController::class, 'register']);
+});
 ```
 
 ---
@@ -327,6 +384,13 @@ php celestial make:model User
 ```bash
 php celestial list
 ```
+
+### Criar Middlewares
+
+```bash
+php celestial make:middleware Auth
+```
+
 
 ---
 
