@@ -76,7 +76,7 @@ php celestial serve
 
 Acesse `http://127.0.0.1:8080` no navegador para ver a página de boas-vindas.
 
-> **Nota**: Se estiver usando Apache ou Nginx, configure o diretório `public/` como raiz do documento.
+> **Nota**: Se estiver usando Apache ou Nginx, configure o diretório `public/` como a pasta raiz do documento.
 
 ---
 
