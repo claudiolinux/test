@@ -596,6 +596,27 @@ abstract class Model
     }
 
     /**
+     * Busca todos os registros e retorna como arrays associativos
+     * 
+     * @return array Array de arrays associativos
+     */
+    public static function allArray(): array
+    {
+        return static::newQuery()->getArray();
+    }
+
+    /**
+     * Busca o primeiro registro e retorna como array associativo
+     * 
+     * @return array|null Array associativo ou null
+     */
+    public static function firstArray(): ?array
+    {
+        return static::newQuery()->firstArray();
+    }
+
+
+    /**
      * Adiciona HAVING à consulta
      * 
      * @param string $column Nome da coluna

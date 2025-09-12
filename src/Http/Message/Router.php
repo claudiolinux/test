@@ -409,12 +409,12 @@ class Router
     private static function resolveMiddlewareAlias(string $alias): string
     {
         $aliases = [
-            'auth' => 'Slenix\\Middlewares\\AuthMiddleware',
-            'guest' => 'Slenix\\Middlewares\\GuestMiddleware',
-            'cors' => 'Slenix\\Middlewares\\CorsMiddleware',
-            'csrf' => 'Slenix\\Middlewares\\CsrfMiddleware',
-            'jwt' => 'Slenix\\Middlewares\\JwtMiddleware',
-            'throttle' => 'Slenix\\Middlewares\\ThrottleMiddleware',
+            'auth' => 'App\\Middlewares\\AuthMiddleware',
+            'guest' => 'App\\Middlewares\\GuestMiddleware',
+            'cors' => 'App\\Middlewares\\CorsMiddleware',
+            'csrf' => 'App\\Middlewares\\CsrfMiddleware',
+            'jwt' => 'App\\Middlewares\\JwtMiddleware',
+            'throttle' => 'App\\Middlewares\\ThrottleMiddleware',
         ];
 
         return $aliases[$alias] ?? $alias;

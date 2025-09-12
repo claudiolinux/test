@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Slenix\Middlewares;
+namespace App\Middlewares;
 
 use Slenix\Http\Auth\Jwt;
 use Slenix\Http\Message\Request;

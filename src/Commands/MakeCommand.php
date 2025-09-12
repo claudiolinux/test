@@ -109,7 +109,7 @@ EOT;
             $middlewareName .= 'Middleware';
         }
 
-        $filePath = __DIR__ . '/../Middlewares/' . $middlewareName . '.php';
+        $filePath = __DIR__ . '/../../app/Middlewares/' . $middlewareName . '.php';
 
         $this->ensureFileDoesNotExist($filePath, $middlewareName, 'Middleware');
 
@@ -126,7 +126,7 @@ EOT;
 
 declare(strict_types=1);
 
-namespace Slenix\Middlewares;
+namespace App\Middlewares;
 
 use Slenix\Http\Message\Middleware;
 use Slenix\Http\Message\Request;

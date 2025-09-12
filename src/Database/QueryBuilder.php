@@ -652,6 +652,43 @@ class QueryBuilder
     }
 
     /**
+     * Executa a consulta e retorna todos os registros como arrays associativos
+     * 
+     * @return array Array de arrays associativos
+     */
+    public function getArray(): array
+    {
+        $sql = $this->buildSelectSql();
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($this->bindings);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Executa a consulta e retorna o primeiro registro como array associativo
+     * 
+     * @return array|null Array associativo ou null se não encontrado
+     */
+    public function firstArray(): ?array
+    {
+        $originalLimit = $this->limit;
+        $this->limit = 1;
+
+        $sql = $this->buildSelectSql();
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($this->bindings);
+
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $this->limit = $originalLimit;
+
+        return $data ?: null;
+    }
+
+    /**
      * Retorna array com valores de uma coluna
      * 
      * @param string $column Nome da coluna
