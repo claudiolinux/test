@@ -692,7 +692,7 @@ O `slenix` suporta mensagens `flash` e sessões que ajudam o usuário a interagi
 
 Router::get('/login', function(Request $req, Response $res){
     return view('login');
-});
+})->middleware('csrf');
 
 Router::post('/submit', function(Request $req, Response $res){
 
