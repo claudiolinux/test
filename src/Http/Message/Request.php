@@ -829,6 +829,28 @@ class Request
     }
 
     /**
+     * Retorna o valor de um cabeçalho como string.
+     *
+     * @param string $name
+     * @param string|null $default
+     * @return string|null
+     */
+    public function getHeaderLine(string $name, ?string $default = null): ?string
+    {
+        $header = $this->getHeader($name);
+
+        if ($header === null) {
+            return $default;
+        }
+
+        if (is_array($header)) {
+            return implode(', ', $header);
+        }
+
+        return (string) $header;
+    }
+
+    /**
      * Sanitiza um valor de entrada.
      *
      * @param string $key

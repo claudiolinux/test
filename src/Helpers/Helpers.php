@@ -7,7 +7,8 @@ use Slenix\Http\Message\Router;
 use Slenix\Libraries\Session;
 use Carbon\Carbon; // Adicionamos a biblioteca Carbon para manipulação de datas
 
-/* |--------------------------------------------|
+/* 
+|--------------------------------------------|
 |****** HELPERS GERAIS E CONSTANTES v1 ******|
 |--------------------------------------------|
 */
@@ -23,12 +24,13 @@ define('SRC_PATH', ROOT_PATH . '/src');
 define('ROUTES_PATH', ROOT_PATH . '/routes');
 define('VIEWS_PATH', ROOT_PATH . '/views');
 
-/* |--------------------------------------------|
+/* 
+|--------------------------------------------|
 |****** FUNÇÕES PARA MANIPULAR STRINGS ******|
 |--------------------------------------------|
 */
 
-if (!function_exists('sanetize')):
+if (!function_exists('sanitize')):
     /**
      * Sanitiza uma string para evitar ataques XSS.
      *
@@ -202,7 +204,8 @@ if (!function_exists('format_date')):
 endif;
 
 
-/* |--------------------------------------------|
+/* 
+|--------------------------------------------|
 |****** FUNÇÕES PARA MANIPULAR O LUNA *******|
 |--------------------------------------------|
 */

@@ -8,4 +8,4 @@ use Slenix\Http\Message\Response;
 
 Router::get('/', function(Request $request, Response $response){
     return view('welcome');
-})->middleware('auth');
+});
