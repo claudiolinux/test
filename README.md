@@ -665,6 +665,65 @@ Router::get('/', function (Request $request, Response $response) {
 ```
 ---
 
+## 🧭 Session e Flash
+O `slenix` suporta mensagens `flash` e sessões que ajudam o usuário a interagir com outras páginas
+
+| Metodos | Descricao|
+|---------|----------|
+| Session::set() | Define um valor na sessão para uma chave específica. |
+| Session::get() | Obtém um valor da sessão com base na chave. |
+| Session::has() | Verifica se uma chave existe na sessão. |
+| Session::flash() | Armazena dados na sessão como flash data |
+| Session::getFlash() | Obtém um valor de flash data e o remove da sessão. |
+| Session::hasFlash() | Verifica se uma chave de flash data existe na sessão. |
+
+### Formulario html Login
+```html
+<form action="/submit" method="post">
+    <label>E-mail</label>
+    <input type="text" name="name" value="@old('email')"><br/>
+    <label>Password</label>
+    <input type="password" name="password" value="@old('password')"><br/>
+    <button type="submit">Submit</button>
+</form>
+```
+### Rotas para o formulário
+```php
+
+Router::get('/login', function(Request $req, Response $res){
+    return view('login');
+});
+
+Router::post('/submit', function(Request $req, Response $res){
+
+    $email = sanitize($request->input('email'));
+    $password = sanitize($request->input('password'));
+
+    Session::flashOldInput($request->all());
+
+    if(empty($email) && empty($password)){
+        Session::flash('error', 'Por favor preencha os campos!');
+    }else {
+        Session::flash('success', 'Bem-vindo de volta!');
+    }
+});
+```
+
+### Template Profile
+
+```php
+
+<h1>Profile</h1>
+
+if(Session::hasFlash('error')){
+    <p>{{ Session::getFlash('error') }}</p>
+}else {
+    <h2>{{ Session::getFlash('success') }}</h2>
+}
+```
+----
+
+
 ## 🛠️ Usando a Celestial CLI
 
 A **Celestial CLI** é uma ferramenta poderosa para agilizar o desenvolvimento. Veja os principais comandos:
