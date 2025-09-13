@@ -666,7 +666,7 @@ Router::get('/', function (Request $request, Response $response) {
 ---
 
 ## 🧭 Session e Flash
-O `slenix` suporta mensagens `flash` e sessões que ajudam o usuário a interagir com outras páginas
+O `slenix` suporta mensagens `flash` e sessões que ajudam o usuário a interagir com outras páginas.
 
 | Metodos | Descricao|
 |---------|----------|
