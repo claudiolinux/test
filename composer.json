@@ -47,11 +47,6 @@
         "email": "barrosclaudio147@gmail.com",
         "issues": "https://github.com/claudiovictors/slenix/issues",
         "source": "https://github.com/claudiovictors/slenix"
-    },
-    "extra": {
-    "branch-alias": {
-        "dev-main": "1.5.x-dev"
     }
-}
 
 }
