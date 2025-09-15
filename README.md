@@ -11,24 +11,29 @@
   <a href="https://packagist.org/packages/slenix/slenix"><img src="https://img.shields.io/packagist/v/slenix/slenix.svg" alt="Packagist Version"></a>
   <a href="https://github.com/claudiovictors/slenix/blob/main/LICENSE"><img src="https://img.shields.io/github/license/claudiovictors/slenix" alt="License"></a>
   <img src="https://img.shields.io/badge/PHP-8.0%2B-blue" alt="PHP Version">
+  <img src="https://img.shields.io/badge/Dependências-Zero-green" alt="Zero Dependencies">
 </p>
 
 ---
 
 ## 📖 Sobre o Slenix
 
-O **Slenix Framework** é um micro framework PHP projetado para desenvolvedores que buscam **simplicidade**, **desempenho** e **flexibilidade**.  
-Baseado na arquitetura **MVC (Model-View-Controller)**, ele oferece ferramentas essenciais para construir aplicações web e APIs de forma rápida e eficiente.
+O **Slenix Framework** é um micro framework PHP projetado para desenvolvedores que buscam **simplicidade**, **desempenho** e **flexibilidade**. Baseado na arquitetura **MVC (Model-View-Controller)**, ele oferece ferramentas essenciais para construir aplicações web e APIs de forma rápida e eficiente.
+
+Diferente de frameworks mais pesados como Laravel, o Slenix é ideal para projetos que exigem alta performance com uma curva de aprendizado reduzida. Comparado ao Slim, ele oferece um ORM integrado e um motor de templates robusto, mantendo a leveza de um micro framework. É perfeito para aplicações como APIs RESTful, sistemas CMS simples ou projetos que requerem configuração mínima.
 
 ### ✨ Recursos Principais
 
 - 🚀 **Roteamento Simples**: Defina rotas dinâmicas com parâmetros e grupos.
-- 🗃️ **ORM Integrado**: Gerencie bancos de dados com modelos intuitivos.
+- 🗃️ **ORM Integrado**: Gerencie bancos de dados com modelos intuitivos e relacionamentos.
 - 🎨 **Template Luna**: Crie views dinâmicas com sintaxe limpa e poderosa.
 - 🛠️ **Celestial CLI**: Automatize a criação de Models, Controllers e inicialização do servidor.
 - 📤 **Upload de Arquivos**: Suporte simplificado para upload de arquivos.
 - 🌐 **Requisições HTTP**: Integração robusta com a classe `HttpClient` para consumir APIs.
 - 🔒 **Middlewares**: Controle de autenticação, CSRF, JWT e muito mais.
+- 🗄️ **Bancos Relacionais**: Suporte a MySQL e PostgreSQL.
+
+> **Dica**: O Slenix é ideal para projetos que precisam de um backend leve e rápido, como APIs para aplicativos móveis ou sistemas de gerenciamento de conteúdo.
 
 ---
 
@@ -36,188 +41,143 @@ Baseado na arquitetura **MVC (Model-View-Controller)**, ele oferece ferramentas 
 
 - 🐘 **PHP**: 8.0 ou superior
 - 🗄️ **Extensão PDO**: Habilitada (necessária para o ORM)
+- 🔌 **Extensões Recomendadas**:
+  - `mbstring`: Para manipulação de strings multibyte.
+  - `curl`: Para requisições HTTP com `HttpClient`.
+  - `openssl`: Para conexões seguras.
 - 📦 **Composer**: Recomendado para autoload
 - 🌍 **Servidor Web**: Apache, Nginx ou servidor embutido do PHP (`celestial serve`)
+- 💻 **Sistemas Operacionais**: Compatível com Linux, macOS e Windows.
+
+> **Nota**: Certifique-se de que as extensões listadas estão habilitadas no seu `php.ini`.
 
 ---
 
 ## ⚙️ Instalação
 
-### 1️⃣ Instalar via Composer
+Siga os passos abaixo para configurar o **Slenix Framework** em seu ambiente.
 
+### 1️⃣ Instalar via Composer
 ```bash
 composer require slenix/slenix
 ```
 
-### 2. Clonar o Repositório
-
+### 2️⃣ Clonar o Repositório
 ```bash
 git clone https://github.com/claudiovictors/slenix.git
-```
-
-### 3. Criar um Projeto com Composer
-
-```bash
-composer create-project slenix/slenix [project-name]
-```
-
-### 4. Instalar Dependências
-
-```bash
+cd slenix
 composer install
 ```
 
-### 5. Iniciar o Servidor Embutido
+### 3️⃣ Criar um Projeto com Composer
+```bash
+composer create-project slenix/slenix meu-projeto
+cd meu-projeto
+```
 
+### 6️⃣ Iniciar o Servidor Embutido
 ```bash
 php celestial serve
 ```
-
 Acesse `http://127.0.0.1:8080` no navegador para ver a página de boas-vindas.
 
-> **Nota**: Se estiver usando Apache ou Nginx, configure o diretório `public/` como a pasta raiz do documento.
+> **Dica**: Configure o arquivo `.env` com as credenciais do banco de dados antes de iniciar o servidor. Veja a seção [Configuração do Banco de Dados](#configuração-do-banco-de-dados).
 
 ---
 
 ## 🚀 Primeiros Passos
 
-### 🛣️ Definindo Rotas
-
-Edite o arquivo `routes/web.php` para criar rotas simples e dinâmicas:
+### 🛣️ Rotas Básicas
+As rotas são definidas no arquivo `routes/web.php`. O Slenix suporta métodos HTTP como `GET`, `POST`, `PUT`, etc.
 
 ```php
 use Slenix\Http\Message\Router;
 
-// Rota simples GET
 Router::get('/', function(Request $request, Response $response) {
     return view('welcome');
 })->name('home');
+```
+> **Dica**: Use nomes de rotas com `->name()` para facilitar redirecionamentos e geração de URLs.
 
-// Rota com parâmetros obrigatórios
+### 🛣️ Rotas com Parâmetros
+Você pode definir parâmetros obrigatórios ou opcionais nas rotas.
+
+```php
+// Rota com parâmetro obrigatório
 Router::get('/user/{id}', function(Request $request, Response $response, array $params) {
-    $userId = $params['id'];
-    return view('user.profile', ['user_id' => $userId]);
+    // Acessa o parâmetro 'id' da URL
+    return view('user.profile', ['user_id' => $params['id']]);
 })->name('user.profile');
 
-// Rota com parâmetros opcionais
+// Rota com parâmetro opcional
 Router::get('/posts/{category?}', function(Request $request, Response $response, array $params) {
+    // Usa 'all' como padrão se a categoria não for fornecida
     $category = $params['category'] ?? 'all';
     return view('posts.index', ['category' => $category]);
 })->name('posts.index');
 ```
 
----
+### 🛣️ Testando Rotas
+Para testar uma rota, use o servidor embutido:
+```bash
+php celestial serve
+```
+Acesse `http://127.0.0.1:8080/user/1` para ver o resultado da rota `/user/{id}`.
 
-### 📦 ROTAS COM CONTROLLERS
+### 🛣️ Rotas com Controllers
 ```php
 Router::get('/users', [UserController::class, 'index'])->name('users.index');
 
-// Rota POST com middleware específico
+// Rota POST com middleware
 Router::post('/users', [UserController::class, 'store'])
     ->middleware('auth')
     ->name('users.store');
-
-// Múltiplos middlewares
-Router::get('/admin/dashboard', [UserController::class, 'dashboard'])
-    ->middleware(['auth', 'admin'])
-    ->name('admin.dashboard');
 ```
 
----
-
-### 🗂️ Grupos de Rotas
-
+### 🛣️ Grupos de Rotas
 Organize rotas relacionadas com prefixos ou middlewares:
 
 ```php
-use Slenix\Http\Message\Router;
-
 Router::group(['prefix' => '/api/v1'], function() {
     Router::get('/users', [UserController::class, 'apiIndex']);
     Router::post('/users', [UserController::class, 'apiStore']);
-    Router::get('/users/{id}', [UserController::class, 'apiShow']);
 });
 
-// Grupo com middleware
 Router::group(['middleware' => 'auth'], function() {
     Router::get('/profile', [UserController::class, 'profile']);
-    Router::put('/profile', [UserController::class, 'updateProfile']);
-    Router::get('/settings', [UserController::class, 'settings']);
-});
-
-// Grupo com prefixo e middleware
-Router::group(['prefix' => '/admin', 'middleware' => ['auth', 'admin']], function() {
-    Router::get('/dashboard', [AdminController::class, 'dashboard']);
-    Router::get('/users', [AdminController::class, 'users']);
-    Router::get('/reports', [AdminController::class, 'reports']);
-    
-    // Sub-grupo
-    Router::group(['prefix' => '/settings'], function() {
-        Router::get('/general', [AdminController::class, 'generalSettings']);
-        Router::get('/security', [AdminController::class, 'securitySettings']);
-    });
-});
-
-// Grupo apenas com middleware (sem prefixo)
-Router::middleware('guest', function() {
-    Router::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Router::post('/login', [AuthController::class, 'login']);
-    Router::get('/register', [AuthController::class, 'showRegister'])->name('register');
-    Router::post('/register', [AuthController::class, 'register']);
 });
 ```
 
----
-
-### 🔒 Rotas com Middlewares
-
+### 🛣️ Rotas com Middlewares
 Proteja suas rotas com middlewares personalizados:
 
 ```php
-use Slenix\Http\Message\Router;
-use Slenix\Middlewares\AuthMiddleware;
-
-// Middleares para prote CSRF
 Router::post('/login', [UserController::class, 'login'])
-        ->middleware('csrf');
-
-Router::get('/login', [UserController::class, 'autenticate'])
-        ->middleware('jwt');
+    ->middleware('csrf');
 
 Router::get('/admin/dashboard', [UserController::class, 'dashboard'])
     ->middleware(['auth', 'admin'])
     ->name('admin.dashboard');
-
-Router::middleware('guest', function() {
-    Router::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Router::post('/login', [AuthController::class, 'login']);
-    Router::get('/register', [AuthController::class, 'showRegister'])->name('register');
-    Router::post('/register', [AuthController::class, 'register']);
-});
 ```
 
 ---
 
-## 📄 Usando o Luna Templates
+## 🎨 Usando o Luna Templates
 
 O **Luna Templates** é o motor de templates do Slenix, inspirado no Blade, com sintaxe limpa e poderosa.
 
 ### Exemplo de Rota com View
-
 ```php
 Router::get('/users/{user_id}', function ($req, $res, $args) {
     $user = User::find($args['user_id']);
-
-    if (!$user):
+    if (!$user) {
         $res->status(404)->json(['message' => 'Usuário não encontrado!']);
-    endif;
-
+    }
     return view('pages.user', compact('user'));
 });
 ```
 
 ### Exemplo de View (`views/pages/user.luna.php`)
-
 ```php
 <h1>Perfil do Usuário</h1>
 
@@ -236,14 +196,32 @@ Router::get('/users/{user_id}', function ($req, $res, $args) {
 @endforeach
 ```
 
+> **Dica**: Sempre valide os dados antes de passá-los para o template para evitar erros de renderização.
+
 ---
 
 ## 🗃️ ORM
 
-### Criando Registros
+O **Slenix ORM** é uma ferramenta poderosa para interagir com bancos de dados relacionais como MySQL e PostgreSQL. Ele suporta operações CRUD, relacionamentos e consultas avançadas.
 
+### Configurando Tabelas
+Antes de usar o ORM, certifique-se de que suas tabelas estão configuradas. Exemplo de estrutura para a tabela `users`:
+
+```sql
+CREATE TABLE users (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+### Criando Registros
 ```php
-// Método 1: Usando create()
+// Usando create()
 $user = User::create([
     'name' => 'João Silva',
     'email' => 'joao@email.com',
@@ -251,343 +229,545 @@ $user = User::create([
     'active' => true
 ]);
 
-// Método 2: Usando new e save()
+// Usando new e save()
 $user = new User();
 $user->name = 'Maria Santos';
 $user->email = 'maria@email.com';
 $user->save();
-
-// Método 3: Usando fill() e save()
-$user = new User();
-$user->fill([
-    'name' => 'Pedro Costa',
-    'email' => 'pedro@email.com'
-])->save();
 ```
 
 ### Lendo Registros
-
 ```php
 // Buscar todos
 $users = User::all();
 
 // Buscar por ID
 $user = User::find(1);
-$user = User::findOrFail(1); // Lança exceção se não encontrar
-
-// Buscar múltiplos IDs
-$users = User::findMany([1, 2, 3]);
-
-// Primeiro registro
-$user = User::first();
-
-// Último registro
-$user = User::last();
 
 // Buscar com condições
-$user = User::firstWhere('email', 'joao@email.com');
-
-// Verificar existência
-$exists = User::exists();
-$count = User::count();
+$activeUsers = User::where('active', true)->get();
 ```
 
 ### Atualizando Registros
-
 ```php
-// Método 1: Buscar e atualizar
 $user = User::find(1);
 $user->name = 'Novo Nome';
 $user->save();
-
-// Método 2: Atualização direta
-$user = User::find(1);
-$user->update(); // Salva apenas campos modificados
-
-// Verificar se foi modificado
-if ($user->isDirty()) {
-    echo "Usuário foi modificado";
-    print_r($user->getDirty()); // Mostra campos alterados
-}
 ```
 
 ### Deletando Registros
-
 ```php
-// Deletar instância específica
 $user = User::find(1);
 $user->delete();
-
-// Deletar por condição (via QueryBuilder)
-User::where('active', 0)->delete();
 ```
 
 ### Consultas Básicas
-
 ```php
 // WHERE simples
-$users = User::where('active', true)->get();
-$users = User::where('age', '>', 18)->get();
 $users = User::where('name', 'LIKE', '%João%')->get();
 
-// WHERE múltiplos (AND)
+// WHERE múltiplos
 $users = User::where('active', true)
             ->where('age', '>', 18)
             ->get();
-
-// WHERE com OR
-$users = User::where('active', true)
-            ->orWhere('name', 'Admin')
-            ->get();
-
-// WHERE IN
-$users = User::whereIn('id', [1, 2, 3, 4])->get();
-$users = User::whereNotIn('status', ['banned', 'inactive'])->get();
-
-// WHERE BETWEEN
-$users = User::whereBetween('age', 18, 65)->get();
-$users = User::whereNotBetween('salary', 1000, 2000)->get();
-
-// WHERE NULL
-$users = User::whereNull('deleted_at')->get();
-$users = User::whereNotNull('email_verified_at')->get();
 ```
 
-### Consultas Avançadas com Grupos
-
+### Consultas Avançadas
 ```php
-// WHERE aninhados (parênteses)
+// WHERE aninhados
 $users = User::where('active', true)
             ->where(function($query) {
                 $query->where('age', '>', 18)
                       ->orWhere('verified', true);
             })->get();
-
-// Equivale a: WHERE active = 1 AND (age > 18 OR verified = 1)
 ```
 
-### Seleção de Colunas
+### Relacionamentos no ORM
+O Slenix ORM suporta relacionamentos como `HasMany`, `HasOne` e `BelongsTo`.
 
+#### Configurando Relacionamentos
+**Modelo User**:
 ```php
-// Selecionar colunas específicas
-$users = User::select(['name', 'email'])->get();
-$users = User::select('name, email')->get();
+namespace App\Models;
 
-// DISTINCT
-$names = User::select('name')->distinct()->get();
+use Slenix\Database\Model;
+
+class User extends Model
+{
+    protected $table = 'users';
+    public function posts() {
+        return $this->hasMany(Post::class, 'user_id', 'id');
+    }
+}
 ```
 
-### Ordenação
-
+**Modelo Post**:
 ```php
-// ORDER BY
-$users = User::orderBy('name')->get(); // ASC por padrão
-$users = User::orderBy('created_at', 'DESC')->get();
-$users = User::orderByDesc('created_at')->get();
+namespace App\Models;
 
-// Múltiplas ordenações
-$users = User::orderBy('name')
-            ->orderByDesc('created_at')
-            ->get();
+use Slenix\Database\Model;
 
-// Ordem aleatória
-$users = User::inRandomOrder()->get();
+class Post extends Model
+{
+    protected $table = 'posts';
+    public function user() {
+        return $this->belongsTo(User::class, 'user_id', 'id');
+    }
+}
 ```
 
-### Agrupamento
-
+#### Eager Loading
 ```php
-// GROUP BY
-$stats = User::select('status')
-            ->selectRaw('COUNT(*) as total')
-            ->groupBy('status')
-            ->get();
-
-// GROUP BY com HAVING
-$stats = User::select('department')
-            ->selectRaw('AVG(salary) as avg_salary')
-            ->groupBy('department')
-            ->having('avg_salary', '>', 5000)
-            ->get();
+$users = User::with('posts:title,content')->get();
+foreach ($users as $user) {
+    echo "Usuário: {$user->name}\n";
+    foreach ($user->posts as $post) {
+        echo "- {$post->title}\n";
+    }
+}
 ```
 
-### Limites e Paginação
-
+### Agregações
 ```php
-// LIMIT
-$users = User::limit(10)->get();
-
-// OFFSET
-$users = User::offset(20)->limit(10)->get();
-
-// Paginação simples
-$users = User::take(10, 2)->get(); // 10 por página, página 2
-
-// Paginação com metadados
-$paginated = User::paginate(15, 1);
-/*
-Retorna:
-[
-    'data' => [...], // Registros
-    'current_page' => 1,
-    'per_page' => 15,
-    'total' => 150,
-    'last_page' => 10,
-    'from' => 1,
-    'to' => 15
-]
-*/
-```
-
-### Joins
-
-```php
-// INNER JOIN
-$users = User::join('profiles', 'users.id', '=', 'profiles.user_id')
-            ->select('users.name', 'profiles.bio')
-            ->get();
-
-// LEFT JOIN
-$users = User::leftJoin('profiles', 'users.id', '=', 'profiles.user_id')
-            ->select('users.name', 'profiles.bio')
-            ->get();
-
-// RIGHT JOIN
-$users = User::rightJoin('profiles', 'users.id', '=', 'profiles.user_id')
-            ->get();
-```
-
-## Agregações
-
-```php
-// COUNT
 $total = User::count();
-$active = User::where('active', true)->count();
-
-// SUM
-$totalSalary = User::sum('salary');
-$deptSalary = User::where('department', 'IT')->sum('salary');
-
-// AVG (Média)
 $avgAge = User::avg('age');
-$avgSalary = User::where('active', true)->avg('salary');
-
-// MAX/MIN
 $maxSalary = User::max('salary');
-$minAge = User::min('age');
-$oldestUser = User::where('active', true)->max('created_at');
-
-// Verificar existência
-$hasUsers = User::exists();
-$hasActiveUsers = User::where('active', true)->exists();
-$noInactiveUsers = User::where('active', false)->doesntExist();
 ```
 
-### Retornando Arrays ao invés de Objetos
-
-```php
-// Todos os registros como array
-$users = User::allArray();
-
-// Query específica como array
-$activeUsers = User::where('active', true)->getArray();
-
-// Primeiro registro como array
-$user = User::firstArray();
-$user = User::where('email', 'test@test.com')->firstArray();
-
-// Convertendo objetos existentes
-$users = User::all();
-$arrays = array_map(fn($user) => $user->toArray(), $users);
-```
-
-### Trabalhando com Valores Específicos
-
-```php
-// Obter apenas uma coluna
-$names = User::pluck('name');
-$emails = User::where('active', true)->pluck('email');
-
-// Pluck com chave personalizada
-$userEmails = User::pluck('email', 'id');
-// Resultado: [1 => 'user1@email.com', 2 => 'user2@email.com']
-
-// Obter valor único
-$userName = User::where('id', 1)->value('name');
-```
-
-### Clonagem e Replicação
-
-```php
-// Replicar modelo (sem ID)
-$user = User::find(1);
-$newUser = $user->replicate();
-$newUser->email = 'novo@email.com';
-$newUser->save();
-
-// Recarregar do banco
-$user->refresh(); // Atualiza com dados do banco
-```
-
-### Serialização
-
-```php
-$user = User::find(1);
-
-// Para array (remove campos $hidden)
-$array = $user->toArray();
-
-// Para JSON
-$json = $user->toJson();
-
-// Array de modelos para JSON
-$users = User::all();
-$json = json_encode(array_map(fn($u) => $u->toArray(), $users));
-```
+> **Boas Práticas**: Sempre valide os dados de entrada antes de usá-los em consultas ao banco para evitar injeção de SQL. Use o método `sanitize()` do Slenix.
 
 ---
 
-## 📧 Envio de E-mails
+## 📧 Sistema de E-mail Avançado
 
-O Slenix suporta o envio de e-mails personalizados utilizando servidores SMTP como **Gmail**, **Outlook**, ou outros. Recomendamos o uso de:
+O Slenix inclui um sistema completo de e-mail que suporta tanto SMTP quanto a função `mail()` nativa do PHP, sem necessidade de dependências externas.
 
-- `msmtp` e `msmtp-mta`
-- `postfix`
+### ⚙️ Configuração no .env
 
-### Exemplo de Envio de E-mail
+Adicione as configurações de e-mail ao seu arquivo `.env`:
 
+```env
+
+# Método de envio: 'mail' (função nativa) ou 'smtp'
+EMAIL_METHOD=smtp
+
+# Remetente padrão
+MAIL_FROM_ADDRESS=noreply@seusite.com
+MAIL_FROM_NAME="Seu Site"
+
+# Configurações SMTP
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=seu_email@gmail.com
+SMTP_PASSWORD=sua_senha_app
+SMTP_ENCRYPTION=tls
+SMTP_AUTH=true
+SMTP_TIMEOUT=30
+```
+
+### 📨 Uso Básico
+
+#### Envio Simples
 ```php
-$email = new Email();
+use Slenix\Libraries\Email;
 
-$sendEmail = $email
-    ->form('contato@slenix.com', 'Equipa Slenix')
-    ->to('user@example.com')
-    ->subject('Welcome Slenix!')
-    ->message('<h1>Olá!</h1><p>Bem-vindo ao Slenix</p>')
+// E-mail texto simples
+$email = new Email();
+$success = $email
+    ->method('smtp') // ou 'mail'
+    ->from('noreply@seusite.com', 'Seu Site')
+    ->to('usuario@exemplo.com')
+    ->subject('Bem-vindo!')
+    ->message('Olá! Bem-vindo ao nosso sistema.')
     ->send();
 
-if($sendEmail):
-    Session::flash('success', 'E-mail enviado com sucesso!');
-else:
-    Session::flash('success', 'Erro ao enviar e-mail!');
-endif;
+if ($success) {
+    echo "E-mail enviado com sucesso!";
+} else {
+    echo "Erro ao enviar e-mail.";
+}
+```
+
+#### E-mail HTML
+```php
+$htmlMessage = '
+<html>
+<head>
+    <style>
+        .container { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; }
+        .header { background: #007bff; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        .footer { background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Bem-vindo ao Slenix!</h1>
+        </div>
+        <div class="content">
+            <p>Olá, <strong>{{nome}}</strong>!</p>
+            <p>Sua conta foi criada com sucesso. Você já pode começar a usar nossos serviços.</p>
+            <p><a href="{{link_login}}" style="background: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Fazer Login</a></p>
+        </div>
+        <div class="footer">
+            <p>Este é um e-mail automático, não responda.</p>
+        </div>
+    </div>
+</body>
+</html>';
+
+$email = new Email();
+$success = $email
+    ->method('smtp')
+    ->from('noreply@seusite.com', 'Equipe Slenix')
+    ->to('usuario@exemplo.com')
+    ->subject('🎉 Conta criada com sucesso!')
+    ->message($htmlMessage, true) // true = HTML
+    ->send();
+```
+
+#### E-mail com Múltiplos Destinatários
+```php
+$email = new Email();
+$success = $email
+    ->method('smtp')
+    ->from('newsletter@seusite.com', 'Newsletter')
+    ->to('user1@exemplo.com')
+    ->to('user2@exemplo.com')
+    ->to('user3@exemplo.com')
+    ->subject('Newsletter Semanal')
+    ->message('<h1>Novidades da Semana</h1><p>Confira as últimas atualizações!</p>', true)
+    ->send();
+```
+
+#### E-mail com Anexos
+```php
+$email = new Email();
+$success = $email
+    ->method('smtp')
+    ->from('vendas@seusite.com', 'Equipe de Vendas')
+    ->to('cliente@exemplo.com')
+    ->subject('Sua Fatura - Mês de Janeiro')
+    ->message('
+        <h2>Fatura em Anexo</h2>
+        <p>Caro cliente,</p>
+        <p>Segue em anexo sua fatura referente ao mês de janeiro.</p>
+        <p>Qualquer dúvida, entre em contato conosco.</p>
+        <p>Atenciosamente,<br><strong>Equipe de Vendas</strong></p>
+    ', true)
+    ->attach('/path/to/invoice.pdf')
+    ->attach('/path/to/terms.pdf')
+    ->send();
+```
+
+### 🎨 Templates de E-mail
+
+#### Criando uma Classe de Templates
+```php
+<?php
+
+namespace App\Mail;
+
+use Slenix\Libraries\Email;
+
+class EmailTemplates
+{
+    public static function welcome(string $userEmail, string $userName): Email
+    {
+        $template = self::loadTemplate('welcome', [
+            'user_name' => $userName,
+            'login_url' => env('APP_URL') . '/login',
+            'app_name' => env('APP_NAME', 'Slenix')
+        ]);
+
+        return (new Email())
+            ->method('smtp')
+            ->from(env('MAIL_FROM_ADDRESS'), env('MAIL_FROM_NAME'))
+            ->to($userEmail)
+            ->subject('🎉 Bem-vindo ao ' . env('APP_NAME', 'Slenix'))
+            ->message($template, true);
+    }
+
+    public static function resetPassword(string $userEmail, string $resetToken): Email
+    {
+        $resetUrl = env('APP_URL') . '/reset-password?token=' . $resetToken;
+        
+        $template = self::loadTemplate('password-reset', [
+            'reset_url' => $resetUrl,
+            'app_name' => env('APP_NAME', 'Slenix'),
+            'expires_in' => '1 hora'
+        ]);
+
+        return (new Email())
+            ->method('smtp')
+            ->from('security@' . parse_url(env('APP_URL'), PHP_URL_HOST), 'Segurança')
+            ->to($userEmail)
+            ->subject('🔒 Redefinição de Senha')
+            ->message($template, true);
+    }
+
+    public static function orderConfirmation(string $userEmail, array $orderData): Email
+    {
+        $template = self::loadTemplate('order-confirmation', $orderData);
+
+        return (new Email())
+            ->method('smtp')
+            ->from('pedidos@' . parse_url(env('APP_URL'), PHP_URL_HOST), 'Pedidos')
+            ->to($userEmail)
+            ->subject('✅ Pedido Confirmado #' . $orderData['order_id'])
+            ->message($template, true);
+    }
+
+    protected static function loadTemplate(string $templateName, array $vars = []): string
+    {
+        $templatePath = __DIR__ . "/templates/{$templateName}.html";
+        
+        if (!file_exists($templatePath)) {
+            throw new \Exception("Template de e-mail não encontrado: {$templateName}");
+        }
+        
+        $template = file_get_contents($templatePath);
+        
+        // Substituição simples de variáveis
+        foreach ($vars as $key => $value) {
+            $template = str_replace('{{' . $key . '}}', $value, $template);
+        }
+        
+        return $template;
+    }
+}
+```
+
+#### Template Welcome (`app/Mail/templates/welcome.html`)
+```html
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bem-vindo</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+        .container { max-width: 600px; margin: 0 auto; background: white; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
+        .content { padding: 30px 20px; }
+        .button { display: inline-block; background: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; }
+        .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎉 Bem-vindo ao {{app_name}}!</h1>
+        </div>
+        
+        <div class="content">
+            <h2>Olá, {{user_name}}! 👋</h2>
+            
+            <p>É com grande prazer que damos as boas-vindas a você em nossa plataforma!</p>
+            
+            <p>Sua conta foi criada com sucesso e você já pode começar a explorar todos os recursos disponíveis.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{login_url}}" class="button">Começar Agora</a>
+            </div>
+            
+            <p>Se você tiver alguma dúvida, não hesite em entrar em contato conosco. Estamos aqui para ajudar!</p>
+            
+            <p>Atenciosamente,<br><strong>Equipe {{app_name}}</strong></p>
+        </div>
+        
+        <div class="footer">
+            <p>Este é um e-mail automático, não responda.</p>
+            <p>© 2024 {{app_name}}. Todos os direitos reservados.</p>
+        </div>
+    </div>
+</body>
+</html>
+```
+
+### 🛡️ Sistema de E-mail com Fallback
+
+#### Implementando Fallback Automático
+```php
+<?php
+
+namespace App\Services;
+
+use Slenix\Libraries\Email;
+use Exception;
+
+class EmailService
+{
+    protected Email $email;
+    protected array $config;
+
+    public function __construct()
+    {
+        $this->email = new Email();
+        $this->config = [
+            'max_retries' => 3,
+            'retry_delay' => 1000, // milliseconds
+            'fallback_to_mail' => true
+        ];
+    }
+
+    public function send(string $to, string $subject, string $message, array $options = []): bool
+    {
+        $attempts = 0;
+        $maxAttempts = $this->config['max_retries'];
+        
+        while ($attempts < $maxAttempts) {
+            try {
+                $email = new Email();
+                
+                $success = $email
+                    ->method($options['method'] ?? 'smtp')
+                    ->from($options['from'] ?? env('MAIL_FROM_ADDRESS'), $options['from_name'] ?? env('MAIL_FROM_NAME'))
+                    ->to($to)
+                    ->subject($subject)
+                    ->message($message, $options['is_html'] ?? true);
+
+                // Adiciona anexos se existirem
+                if (isset($options['attachments'])) {
+                    foreach ($options['attachments'] as $attachment) {
+                        $email->attach($attachment);
+                    }
+                }
+
+                if ($email->send()) {
+                    $this->logSuccess($to, $subject, $attempts + 1);
+                    return true;
+                }
+                
+            } catch (Exception $e) {
+                $this->logError($to, $subject, $e->getMessage(), $attempts + 1);
+            }
+            
+            $attempts++;
+            
+            if ($attempts < $maxAttempts) {
+                usleep($this->config['retry_delay'] * 1000);
+            }
+        }
+        
+        // Fallback para função mail() se SMTP falhar
+        if ($this->config['fallback_to_mail'] && ($options['method'] ?? 'smtp') === 'smtp') {
+            return $this->sendFallback($to, $subject, $message, $options);
+        }
+        
+        return false;
+    }
+
+    protected function sendFallback(string $to, string $subject, string $message, array $options = []): bool
+    {
+        try {
+            $email = new Email();
+            
+            $success = $email
+                ->method('mail')
+                ->from($options['from'] ?? env('MAIL_FROM_ADDRESS'), $options['from_name'] ?? env('MAIL_FROM_NAME'))
+                ->to($to)
+                ->subject($subject)
+                ->message($message, $options['is_html'] ?? true)
+                ->send();
+                
+            if ($success) {
+                $this->logSuccess($to, $subject, 'fallback');
+            } else {
+                $this->logError($to, $subject, 'Fallback também falhou', 'fallback');
+            }
+            
+            return $success;
+            
+        } catch (Exception $e) {
+            $this->logError($to, $subject, $e->getMessage(), 'fallback');
+            return false;
+        }
+    }
+
+    protected function logSuccess(string $to, string $subject, $attempt): void
+    {
+        error_log("Email enviado com sucesso para {$to} (tentativa: {$attempt}) - Assunto: {$subject}");
+    }
+
+    protected function logError(string $to, string $subject, string $error, $attempt): void
+    {
+        error_log("Falha ao enviar email para {$to} (tentativa: {$attempt}) - Erro: {$error} - Assunto: {$subject}");
+    }
+
+    // Método para enviar emails em lote
+    public function sendBatch(array $recipients, string $subject, string $message, array $options = []): array
+    {
+        $results = [];
+        
+        foreach ($recipients as $recipient) {
+            $email = is_array($recipient) ? $recipient['email'] : $recipient;
+            $name = is_array($recipient) ? ($recipient['name'] ?? '') : '';
+            
+            // Personaliza mensagem se necessário
+            $personalizedMessage = $message;
+            if ($name) {
+                $personalizedMessage = str_replace('{{name}}', $name, $personalizedMessage);
+            }
+            
+            $results[$email] = $this->send($email, $subject, $personalizedMessage, $options);
+            
+            // Pequena pausa entre envios para evitar spam
+            usleep(100000); // 0.1 segundos
+        }
+        
+        return $results;
+    }
+}
+```
+
+#### Usando o EmailService
+```php
+use App\Services\EmailService;
+use App\Mail\EmailTemplates;
+
+// Envio simples
+$emailService = new EmailService();
+$success = $emailService->send(
+    'usuario@exemplo.com',
+    'Bem-vindo!',
+    '<h1>Olá!</h1><p>Bem-vindo ao nosso site!</p>',
+    ['is_html' => true]
+);
+
+// Usando templates
+$welcomeEmail = EmailTemplates::welcome('usuario@exemplo.com', 'João Silva');
+$success = $welcomeEmail->send();
+
+// Envio em lote
+$recipients = [
+    ['email' => 'user1@exemplo.com', 'name' => 'João'],
+    ['email' => 'user2@exemplo.com', 'name' => 'Maria'],
+    ['email' => 'user3@exemplo.com', 'name' => 'Pedro']
+];
+
+$results = $emailService->sendBatch(
+    $recipients,
+    'Newsletter Semanal',
+    '<h1>Olá, {{name}}!</h1><p>Confira as novidades desta semana!</p>'
+);
 ```
 
 ---
 
 ## 🌐 Usando a Classe HttpClient
 
-A classe `HttpClient` permite realizar requisições HTTP de forma fluida e robusta, com suporte a métodos HTTP, autenticação, cabeçalhos personalizados, retries e eventos.
+A classe `HttpClient` permite realizar requisições HTTP de forma fluida e robusta.
 
 ### Exemplo 1: Consumindo uma API JSON
-
 ```php
 use Slenix\Http\Message\HttpClient;
 
 $client = HttpClient::make()
     ->baseUrl('https://api.example.com')
     ->withHeader('Accept', 'application/json')
-    ->withAuth('bearer', 'seu-token-aqui')
     ->withRetries(2, 1000);
 
 $response = $client->get('/users', ['page' => 1, 'limit' => 10]);
@@ -600,164 +780,94 @@ if ($response->getStatusCode() === 200) {
 }
 ```
 
-### Exemplo 2: Enviando um Formulário com Arquivo
-
+### Exemplo 2: Tratando Erros
 ```php
-use Slenix\Http\Message\HttpClient;
+try {
+    $client = HttpClient::make()
+        ->baseUrl('https://api.example.com')
+        ->withHeader('Accept', 'application/json');
 
-$client = HttpClient::make()
-    ->baseUrl('https://api.example.com')
-    ->withAuth('basic', ['admin', 'secret'])
-    ->asForm([
-        'file' => new CURLFile('/caminho/para/arquivo.pdf'),
-        'description' => 'Documento importante',
-    ]);
-
-$response = $client->post('/upload');
-
-if ($response->getStatusCode() === 201) {
-    echo "Arquivo enviado com sucesso!";
-} else {
-    echo "Erro: " . $response->getBody();
+    $response = $client->get('/users');
+    $users = $response->getJson();
+    print_r($users);
+} catch (\Exception $e) {
+    echo "Erro na requisição: " . $e->getMessage();
 }
 ```
 
-### Exemplo 3: Usando Callbacks para Debugging
-
+### Exemplo 3: Consumindo a API do GitHub
 ```php
-use Slenix\Http\Message\HttpClient;
-
 $client = HttpClient::make()
-    ->baseUrl('https://api.example.com')
-    ->on('before', function ($method, $url, $body) {
-        echo "Enviando $method para $url com corpo: " . json_encode($body) . "\n";
-    })
-    ->on('after', function ($response) {
-        echo "Resposta recebida com status: " . $response->getStatusCode() . "\n";
-    })
-    ->on('error', function ($exception) {
-        echo "Erro na requisição: " . $exception->getMessage() . "\n";
-    });
+    ->baseUrl('https://api.github.com')
+    ->withHeader('Accept', 'application/vnd.github.v3+json');
 
-$response = $client->get('/posts');
+$response = $client->get('/users/claudiovictors');
+if ($response->getStatusCode() === 200) {
+    $user = $response->getJson();
+    echo "Nome: {$user['name']}\nRepositórios: {$user['public_repos']}";
+}
 ```
 
----
-
-### Consumindo a API publica do TMDB
-
-```php
-Router::get('/', function (Request $request, Response $response) {
-    
-    $baseUrl = 'https://api.themoviedb.org';
-
-    $token = 'SUA_CHAVE_SECRETA'; // Recomando usar no no arquivo .env
-
-    $httpClientInstance = HttpClient::make()
-                        ->baseUrl($baseUrl)
-                        ->withAuth('bearer', $token)
-                        ->get('/3/movie/11');
-
-    $data = $httpClientInstance->getBody();
-
-    $response->json($data);
-});
-```
 ---
 
 ## 🧭 Session e Flash
-O `slenix` suporta mensagens `flash` e sessões que ajudam o usuário a interagir com outras páginas.
 
-| Metodos | Descricao|
-|---------|----------|
-| Session::set() | Define um valor na sessão para uma chave específica. |
-| Session::get() | Obtém um valor da sessão com base na chave. |
-| Session::has() | Verifica se uma chave existe na sessão. |
-| Session::flash() | Armazena dados na sessão como flash data |
-| Session::getFlash() | Obtém um valor de flash data e o remove da sessão. |
-| Session::hasFlash() | Verifica se uma chave de flash data existe na sessão. |
+O Slenix suporta mensagens `flash` e sessões para interagir entre páginas.
 
-### Formulario html Login
+| Métodos | Descrição |
+|---------|-----------|
+| Session::set() | Define um valor na sessão. |
+| Session::get() | Obtém um valor da sessão. |
+| Session::flash() | Armazena dados como flash data. |
+| Session::getFlash() | Obtém e remove flash data. |
+
+### Exemplo de Formulário
 ```html
 <form action="/submit" method="post">
     <label>E-mail</label>
-    <input type="text" name="name" value="@old('email')"><br/>
-    <label>Password</label>
+    <input type="text" name="email" value="@old('email')"><br/>
+    <label>Senha</label>
     <input type="password" name="password" value="@old('password')"><br/>
-    <button type="submit">Submit</button>
+    <button type="submit">Entrar</button>
 </form>
 ```
-### Rotas para o formulário
-```php
 
-Router::get('/login', function(Request $req, Response $res){
+### Exemplo de Rota
+```php
+Router::get('/login', function(Request $req, Response $res) {
     return view('login');
 })->middleware('csrf');
 
-Router::post('/submit', function(Request $req, Response $res){
+Router::post('/submit', function(Request $req, Response $res) {
+    $email = sanitize($req->input('email'));
+    $password = sanitize($req->input('password'));
 
-    $email = sanitize($request->input('email'));
-    $password = sanitize($request->input('password'));
+    Session::flashOldInput($req->all());
 
-    Session::flashOldInput($request->all());
-
-    if(empty($email) && empty($password)){
-        Session::flash('error', 'Por favor preencha os campos!');
-    }else {
-        Session::flash('success', 'Bem-vindo de volta!');
+    if (empty($email) || empty($password)) {
+        Session::flash('error', 'Por favor, preencha todos os campos!');
+    } else {
+        Session::flash('success', 'Boas-vindas!');
     }
+
+    return redirect('/profile');
 });
 ```
 
-### Template Profile
-
-```php
-
-<h1>Profile</h1>
-
-if(Session::hasFlash('error')){
-    <p>{{ Session::getFlash('error') }}</p>
-}else {
-    <h2>{{ Session::getFlash('success') }}</h2>
-}
-```
-----
-
+---
 
 ## 🛠️ Usando a Celestial CLI
 
-A **Celestial CLI** é uma ferramenta poderosa para agilizar o desenvolvimento. Veja os principais comandos:
+A **Celestial CLI** é uma ferramenta para agilizar o desenvolvimento.
 
-### Iniciar o Servidor
-
+### Comandos Principais
 ```bash
-php celestial serve
+php celestial serve          # Inicia o servidor embutido
+php celestial make:controller UserController  # Cria um controller
+php celestial make:model User  # Cria um modelo
+php celestial make:middleware Auth  # Cria um middleware
+php celestial list          # Lista todos os comandos
 ```
-
-### Criar um Controller
-
-```bash
-php celestial make:controller UserController
-```
-
-### Criar um Model
-
-```bash
-php celestial make:model User
-```
-
-### Listar Comandos Disponíveis
-
-```bash
-php celestial list
-```
-
-### Criar Middlewares
-
-```bash
-php celestial make:middleware Auth
-```
-
 
 ---
 
@@ -766,20 +876,32 @@ php celestial make:middleware Auth
 Configure o acesso ao banco de dados no arquivo `.env`:
 
 ```env
-# Configurações Gerais
 APP_DEBUG=true
 APP_URL=http://localhost:8080
 
-# Conexão com Banco de Dados
 DB_CONNECTION=mysql
 DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=slenix_db
 DB_USERNAME=seu_usuario
 DB_PASSWORD=sua_senha
-```
 
-> **Dica**: Defina `APP_DEBUG=true` para habilitar a tela de erros durante o desenvolvimento.
+# Método de envio: 'mail' (função nativa) ou 'smtp'
+EMAIL_METHOD=smtp
+
+# Remetente padrão
+MAIL_FROM_ADDRESS=noreply@seusite.com
+MAIL_FROM_NAME="Seu Site"
+
+# Configurações SMTP
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=seu_email@gmail.com
+SMTP_PASSWORD=sua_senha_app
+SMTP_ENCRYPTION=tls
+SMTP_AUTH=true
+SMTP_TIMEOUT=30
+```
 
 ---
 

@@ -58,6 +58,9 @@ abstract class Model
     /** @var string Nome da coluna updated_at */
     protected string $updatedAt = 'updated_at';
 
+    /** @var array Relacionamentos carregados */
+    protected array $relations = [];
+
     /**
      * Construtor da classe
      * 
@@ -73,7 +76,22 @@ abstract class Model
         $this->pdo = Database::getInstance();
 
         if (!empty($attributes)) {
-            $this->fill($attributes);
+            $this->fillAttributes($attributes);
+        }
+    }
+
+    /**
+     * Preenche atributos sem afetar dirty state (usado no construtor)
+     * 
+     * @param array $attributes Atributos para preencher
+     * @return void
+     */
+    protected function fillAttributes(array $attributes): void
+    {
+        foreach ($attributes as $key => $value) {
+            if ($this->isFillable($key)) {
+                $this->attributes[$key] = $this->castAttribute($key, $value);
+            }
         }
     }
 
@@ -85,23 +103,36 @@ abstract class Model
      */
     public function __set(string $name, $value): void
     {
-        $this->attributes[$name] = $this->castAttribute($name, $value);
-
-        if ($name !== $this->primaryKey) {
-            $this->dirty[$name] = $this->attributes[$name];
-        }
+        $this->setAttribute($name, $value);
     }
 
     /**
-     * Getter mágico para obter atributos
+     * Getter mágico para obter atributos OU relações
      * 
-     * @param string $name Nome do atributo
-     * @return mixed Valor do atributo ou null se não existir
+     * @param string $name Nome do atributo ou relação
+     * @return mixed Valor do atributo ou relação, ou null se não existir
      */
     public function __get(string $name)
     {
+        // Primeiro, tenta atributo próprio
         if (array_key_exists($name, $this->attributes)) {
             return $this->castAttribute($name, $this->attributes[$name]);
+        }
+
+        // Se é uma relação (método que retorna Relation), carrega lazy se não estiver
+        if (method_exists($this, $name)) {
+            $method = new \ReflectionMethod($this, $name);
+            $returnType = $method->getReturnType();
+            
+            if ($returnType && 
+                $returnType instanceof \ReflectionNamedType && 
+                str_contains($returnType->getName(), 'Relation')) {
+                
+                if (!isset($this->relations[$name])) {
+                    $this->relations[$name] = $this->$name()->getResults();
+                }
+                return $this->relations[$name];
+            }
         }
 
         return null;
@@ -116,7 +147,7 @@ abstract class Model
      */
     public static function __callStatic(string $method, array $parameters)
     {
-        $queryBuilder = (new static())->newQuery();
+        $queryBuilder = static::newQuery();
         if (!method_exists($queryBuilder, $method)) {
             throw new \BadMethodCallException("Método '$method' não existe no QueryBuilder.");
         }
@@ -134,7 +165,30 @@ abstract class Model
         if (empty($instance->table)) {
             throw new \Exception('A propriedade $table deve ser definida na classe modelo.');
         }
+
         return new QueryBuilder(Database::getInstance(), $instance->table, static::class);
+    }
+
+    /**
+     * Define um atributo com cast e dirty tracking
+     * 
+     * @param string $key Nome do atributo
+     * @param mixed $value Valor do atributo
+     * @return void
+     */
+    protected function setAttribute(string $key, $value): void
+    {
+        $castValue = $this->castAttribute($key, $value);
+
+        // Verifica se o valor mudou
+        $hasChanged = !array_key_exists($key, $this->attributes) || $this->attributes[$key] !== $castValue;
+
+        $this->attributes[$key] = $castValue;
+
+        // Só adiciona ao dirty se não for chave primária E se o valor mudou
+        if ($key !== $this->primaryKey && $hasChanged) {
+            $this->dirty[$key] = $castValue;
+        }
     }
 
     /**
@@ -150,42 +204,132 @@ abstract class Model
             return $value;
         }
 
+        $castType = $this->casts[$key];
+
         try {
-            switch ($this->casts[$key]) {
-                case 'int':
-                case 'integer':
-                    return (int) $value;
-                case 'float':
-                case 'double':
-                    return (float) $value;
-                case 'string':
-                    return (string) $value;
-                case 'bool':
-                case 'boolean':
-                    return (bool) $value;
-                case 'array':
-                case 'json':
-                    if (is_string($value)) {
-                        $decoded = json_decode($value, true);
-                        if (json_last_error() === JSON_ERROR_NONE) {
-                            return $decoded;
-                        }
-                        throw new \Exception("Falha ao decodificar JSON para o atributo '$key'.");
-                    }
-                    return $value;
-                case 'datetime':
-                    if (is_string($value)) {
-                        return new \DateTime($value);
-                    }
-                    return $value;
-                default:
-                    return $value;
-            }
-        } catch (\Exception $e) {
-            // Logar o erro ou lançar uma exceção específica
-            error_log("Erro ao aplicar cast ao atributo '$key': " . $e->getMessage());
-            return $value; // Retorna o valor original como fallback
+            return match ($castType) {
+                'int', 'integer' => $this->castToInteger($value),
+                'float', 'double' => $this->castToFloat($value),
+                'bool', 'boolean' => $this->castToBoolean($value),
+                'string' => $this->castToString($value),
+                'json', 'array' => $this->castToJson($value, $key),
+                'datetime' => $this->castToDateTime($value),
+                default => $value
+            };
+        } catch (\Throwable $e) {
+            throw new \InvalidArgumentException(
+                "Erro ao aplicar cast '{$castType}' ao atributo '{$key}': " . $e->getMessage(),
+                0,
+                $e
+            );
         }
+    }
+
+    /**
+     * Cast para integer
+     * 
+     * @param mixed $value
+     * @return int
+     */
+    private function castToInteger($value): int
+    {
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+        throw new \InvalidArgumentException("Valor não pode ser convertido para integer");
+    }
+
+    /**
+     * Cast para float
+     * 
+     * @param mixed $value
+     * @return float
+     */
+    private function castToFloat($value): float
+    {
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+        throw new \InvalidArgumentException("Valor não pode ser convertido para float");
+    }
+
+    /**
+     * Cast para boolean
+     * 
+     * @param mixed $value
+     * @return bool
+     */
+    private function castToBoolean($value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+        if (is_numeric($value)) {
+            return (bool) $value;
+        }
+        if (is_string($value)) {
+            return in_array(strtolower($value), ['1', 'true', 'yes', 'on']);
+        }
+        return (bool) $value;
+    }
+
+    /**
+     * Cast para string
+     * 
+     * @param mixed $value
+     * @return string
+     */
+    private function castToString($value): string
+    {
+        if (is_scalar($value) || (is_object($value) && method_exists($value, '__toString'))) {
+            return (string) $value;
+        }
+        throw new \InvalidArgumentException("Valor não pode ser convertido para string");
+    }
+
+    /**
+     * Cast para JSON/array
+     * 
+     * @param mixed $value
+     * @param string $key
+     * @return array
+     */
+    private function castToJson($value, string $key): array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if (!is_string($value)) {
+            throw new \InvalidArgumentException("Valor deve ser string ou array para cast JSON");
+        }
+
+        $decoded = json_decode($value, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new \InvalidArgumentException("JSON inválido: " . json_last_error_msg());
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Cast para DateTime
+     * 
+     * @param mixed $value
+     * @return \DateTime
+     */
+    private function castToDateTime($value): \DateTime
+    {
+        if ($value instanceof \DateTime) {
+            return $value;
+        }
+        if (is_string($value)) {
+            return new \DateTime($value);
+        }
+        if (is_int($value)) {
+            return new \DateTime('@' . $value);
+        }
+        throw new \InvalidArgumentException("Valor não pode ser convertido para DateTime");
     }
 
     /**
@@ -198,11 +342,10 @@ abstract class Model
     {
         foreach ($data as $key => $value) {
             if ($this->isFillable($key)) {
-                $this->attributes[$key] = $this->castAttribute($key, $value);
+                $this->setAttribute($key, $value);
             }
         }
 
-        $this->dirty = [];
         return $this;
     }
 
@@ -249,24 +392,19 @@ abstract class Model
      */
     public function save(): bool
     {
+        $isNewRecord = empty($this->attributes[$this->primaryKey]);
+
         if ($this->timestamps) {
             $now = date('Y-m-d H:i:s');
 
-            if (empty($this->attributes[$this->primaryKey])) {
-                // Novo registro - define created_at
-                $this->attributes[$this->createdAt] = $now;
+            if ($isNewRecord) {
+                $this->setAttribute($this->createdAt, $now);
             }
 
-            // Sempre atualiza updated_at
-            $this->attributes[$this->updatedAt] = $now;
-            $this->dirty[$this->updatedAt] = $now;
+            $this->setAttribute($this->updatedAt, $now);
         }
 
-        if (empty($this->attributes[$this->primaryKey])) {
-            return $this->insert();
-        }
-
-        return $this->update();
+        return $isNewRecord ? $this->performInsert() : $this->performUpdate();
     }
 
     /**
@@ -274,21 +412,25 @@ abstract class Model
      * 
      * @return bool True se inseriu com sucesso, false caso contrário
      */
-    protected function insert(): bool
+    protected function performInsert(): bool
     {
         if (empty($this->attributes)) {
             return false;
         }
 
-        $columns = implode(',', array_keys($this->attributes));
-        $placeholders = ':' . implode(',:', array_keys($this->attributes));
+        $columns = array_keys($this->attributes);
+        $columnsList = implode(',', $columns);
+        $placeholders = ':' . implode(',:', $columns);
 
-        $sql = "INSERT INTO {$this->table} ($columns) VALUES ($placeholders)";
+        $sql = "INSERT INTO {$this->table} ($columnsList) VALUES ($placeholders)";
         $stmt = $this->pdo->prepare($sql);
         $result = $stmt->execute($this->attributes);
 
         if ($result) {
-            $this->attributes[$this->primaryKey] = $this->pdo->lastInsertId();
+            $lastId = $this->pdo->lastInsertId();
+            if ($lastId) {
+                $this->attributes[$this->primaryKey] = $lastId;
+            }
             $this->dirty = [];
         }
 
@@ -300,25 +442,34 @@ abstract class Model
      * 
      * @return bool True se atualizou com sucesso, false caso contrário
      */
-    public function update(): bool
+    protected function performUpdate(): bool
     {
         if (empty($this->dirty) || empty($this->attributes[$this->primaryKey])) {
-            return true;
+            return true; // Nada para atualizar
         }
 
         $updates = array_map(fn($key) => "$key = :$key", array_keys($this->dirty));
-        $sql = "UPDATE {$this->table} SET " . implode(',', $updates) . " WHERE {$this->primaryKey} = :{$this->primaryKey}";
+        $sql = "UPDATE {$this->table} SET " . implode(', ', $updates) . " WHERE {$this->primaryKey} = :{$this->primaryKey}";
 
         $stmt = $this->pdo->prepare($sql);
         $params = array_merge($this->dirty, [$this->primaryKey => $this->attributes[$this->primaryKey]]);
         $result = $stmt->execute($params);
 
         if ($result) {
-            $this->attributes = array_merge($this->attributes, $this->dirty);
             $this->dirty = [];
         }
 
         return $result;
+    }
+
+    /**
+     * Alias público para performUpdate (mantém compatibilidade)
+     * 
+     * @return bool
+     */
+    public function update(): bool
+    {
+        return $this->performUpdate();
     }
 
     /**
@@ -615,7 +766,6 @@ abstract class Model
         return static::newQuery()->firstArray();
     }
 
-
     /**
      * Adiciona HAVING à consulta
      * 
@@ -704,9 +854,9 @@ abstract class Model
     }
 
     /**
-     * Converte o modelo para array
+     * Converte o modelo para array (incluindo relações)
      * 
-     * @return array Array com todos os atributos (exceto os ocultos)
+     * @return array Array com todos os atributos (exceto os ocultos) + relações
      */
     public function toArray(): array
     {
@@ -717,6 +867,17 @@ abstract class Model
             unset($array[$hidden]);
         }
 
+        // Adiciona relações
+        foreach ($this->relations as $key => $value) {
+            if (is_array($value)) {
+                $array[$key] = array_map(fn($item) => $item instanceof self ? $item->toArray() : $item, $value);
+            } elseif ($value instanceof self) {
+                $array[$key] = $value->toArray();
+            } else {
+                $array[$key] = $value;
+            }
+        }
+
         return $array;
     }
 
@@ -724,10 +885,11 @@ abstract class Model
      * Converte o modelo para JSON
      * 
      * @return string JSON string
+     * @throws \JsonException
      */
     public function toJson(): string
     {
-        return json_encode($this->toArray());
+        return json_encode($this->toArray(), JSON_THROW_ON_ERROR);
     }
 
     /**
@@ -745,6 +907,7 @@ abstract class Model
 
         if ($fresh) {
             $this->attributes = $fresh->attributes;
+            $this->relations = [];
             $this->dirty = [];
             return true;
         }
@@ -753,13 +916,18 @@ abstract class Model
     }
 
     /**
-     * Verifica se o modelo foi modificado
+     * Verifica se um atributo específico foi modificado
      * 
-     * @return bool True se há modificações não salvas
+     * @param string|null $key Nome do atributo (null para verificar qualquer)
+     * @return bool True se o atributo foi modificado
      */
-    public function isDirty(): bool
+    public function isDirty(string $key = null): bool
     {
-        return !empty($this->dirty);
+        if ($key === null) {
+            return !empty($this->dirty);
+        }
+
+        return array_key_exists($key, $this->dirty);
     }
 
     /**
@@ -773,6 +941,16 @@ abstract class Model
     }
 
     /**
+     * Verifica se o modelo é novo (não salvo no banco)
+     * 
+     * @return bool True se é um modelo novo
+     */
+    public function isNew(): bool
+    {
+        return empty($this->attributes[$this->primaryKey]);
+    }
+
+    /**
      * Clona o modelo (replica sem chave primária)
      * 
      * @return static Nova instância com os mesmos atributos
@@ -781,6 +959,10 @@ abstract class Model
     {
         $attributes = $this->attributes;
         unset($attributes[$this->primaryKey]); // Remove a chave primária
+
+        if ($this->timestamps) {
+            unset($attributes[$this->createdAt], $attributes[$this->updatedAt]);
+        }
 
         return new static($attributes);
     }
@@ -816,6 +998,16 @@ abstract class Model
     }
 
     /**
+     * Obtém todos os atributos do modelo
+     * 
+     * @return array Array com todos os atributos
+     */
+    public function getAttributes(): array
+    {
+        return $this->attributes;
+    }
+
+    /**
      * Executa uma consulta personalizada
      * 
      * @param string $sql Query SQL
@@ -831,7 +1023,7 @@ abstract class Model
         $results = [];
         while ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $model = new static();
-            $model->fill($data);
+            $model->fillAttributes($data); // Usa fillAttributes para não afetar dirty
             $results[] = $model;
         }
 
@@ -848,5 +1040,88 @@ abstract class Model
         $instance = new static();
         $sql = "TRUNCATE TABLE {$instance->table}";
         return $instance->pdo->exec($sql) !== false;
+    }
+
+    /**
+     * Define uma relação (usado pelo QueryBuilder no eager loading)
+     * 
+     * @param string $key
+     * @param mixed $value
+     * @return $this
+     */
+    public function setRelation(string $key, $value): self
+    {
+        $this->relations[$key] = $value;
+        return $this;
+    }
+
+    /**
+     * Carrega relacionamentos eager (com colunas específicas opcionais)
+     * 
+     * @param string|array $relations Nomes das relações, ex: 'posts' ou ['posts:title,content']
+     * @return QueryBuilder
+     */
+    public static function with($relations): QueryBuilder
+    {
+        $relationsToLoad = is_array($relations) ? $relations : func_get_args();
+
+        return static::newQuery()->withRelations($relationsToLoad);
+    }
+
+    /**
+     * Define um relacionamento HasOne (um-para-um)
+     * 
+     * @param string $related Nome da classe do modelo relacionado
+     * @param string|null $foreignKey Chave estrangeira (padrão: parentTable_id)
+     * @param string|null $localKey Chave local (padrão: id)
+     * @return HasOne
+     */
+    protected function hasOne(string $related, ?string $foreignKey = null, ?string $localKey = null)
+    {
+        $foreignKey = $foreignKey ?? $this->getTable() . '_id';
+        $localKey = $localKey ?? $this->primaryKey;
+        return new HasOne(new $related(), $this, $foreignKey, $localKey);
+    }
+
+    /**
+     * Define um relacionamento BelongsTo (muitos-para-um)
+     * 
+     * @param string $related Nome da classe do modelo relacionado (parent)
+     * @param string $foreignKey Chave estrangeira no modelo atual
+     * @param string|null $ownerKey Chave do owner (padrão: id)
+     * @return BelongsTo
+     */
+    protected function belongsTo(string $related, ?string $foreignKey = null, ?string $ownerKey = null)
+    {
+        $relatedInstance = new $related();
+        $foreignKey = $foreignKey ?? strtolower($this->getClassBasename($related)) . '_id';
+        $ownerKey = $ownerKey ?? $relatedInstance->getKeyName();
+        return new BelongsTo($relatedInstance, $this, $foreignKey, $ownerKey);
+    }
+
+    /**
+     * Define um relacionamento HasMany (um-para-muitos)
+     * 
+     * @param string $related Nome da classe do modelo relacionado
+     * @param string|null $foreignKey Chave estrangeira (padrão: parentTable_id)
+     * @param string|null $localKey Chave local (padrão: id)
+     * @return HasMany
+     */
+    protected function hasMany(string $related, ?string $foreignKey = null, ?string $localKey = null)
+    {
+        $foreignKey = $foreignKey ?? $this->getTable() . '_id';
+        $localKey = $localKey ?? $this->primaryKey;
+        return new HasMany(new $related(), $this, $foreignKey, $localKey);
+    }
+
+    /**
+     * Obtém o nome da classe sem namespace (helper para relacionamentos)
+     * 
+     * @param string $class Nome completo da classe
+     * @return string Nome da classe sem namespace
+     */
+    private function getClassBasename(string $class): string
+    {
+        return basename(str_replace('\\', '/', $class));
     }
 }

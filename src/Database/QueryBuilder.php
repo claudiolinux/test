@@ -10,7 +10,7 @@
  * |
  * | @package Slenix\Database
  * | @author Slenix
- * | @version 1.1 - Melhorado para retornar objetos modelo
+ * | @version 2.0 - Com suporte a eager loading de relacionamentos
  */
 
 declare(strict_types=1);
@@ -28,45 +28,52 @@ class QueryBuilder
 {
     /** @var PDO Instância da conexão com o banco */
     protected PDO $pdo;
-    
+
     /** @var string Nome da tabela principal */
     protected string $table;
-    
+
     /** @var string Classe do modelo associado */
     protected string $modelClass;
-    
+
     /** @var array Colunas selecionadas */
     protected array $select = ['*'];
-    
+
     /** @var array Condições WHERE */
     protected array $wheres = [];
-    
+
     /** @var array Parâmetros para binding */
     protected array $bindings = [];
-    
+
     /** @var array Joins da consulta */
     protected array $joins = [];
-    
+
     /** @var array Cláusulas ORDER BY */
     protected array $orders = [];
-    
+
     /** @var array Cláusulas GROUP BY */
     protected array $groups = [];
-    
+
     /** @var array Condições HAVING */
     protected array $havings = [];
-    
+
     /** @var int|null Limite de registros */
     protected ?int $limit = null;
-    
+
     /** @var int Offset para paginação */
     protected int $offset = 0;
-    
+
     /** @var bool Se deve usar DISTINCT */
     protected bool $distinct = false;
-    
+
     /** @var int Contador para parâmetros únicos */
     protected int $paramCount = 0;
+
+    /**
+     * Armazena relações pra eager loading
+     * 
+     * @var array Ex: ['posts:title,content' => ['title', 'content'], 'profile' => ['*']]
+     */
+    protected array $eagerRelations = [];
 
     /**
      * Construtor do QueryBuilder
@@ -95,7 +102,7 @@ class QueryBuilder
         if (is_string($columns)) {
             $columns = array_map('trim', explode(',', $columns));
         }
-        
+
         $this->select = is_array($columns) ? $columns : [$columns];
         return $this;
     }
@@ -138,7 +145,7 @@ class QueryBuilder
         }
 
         $paramName = $this->generateParamName();
-        
+
         $this->wheres[] = [
             'type' => 'basic',
             'column' => $column,
@@ -147,9 +154,9 @@ class QueryBuilder
             'boolean' => $boolean,
             'param' => $paramName
         ];
-        
+
         $this->bindings[$paramName] = $value;
-        
+
         return $this;
     }
 
@@ -410,7 +417,7 @@ class QueryBuilder
     public function orderBy(string $column, string $direction = 'ASC'): self
     {
         $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
-        
+
         $this->orders[] = [
             'column' => $column,
             'direction' => $direction
@@ -431,14 +438,17 @@ class QueryBuilder
     }
 
     /**
-     * Adiciona ordenação aleatória
+     * Adiciona ordenação aleatória (compatível com MySQL e PostgreSQL)
      * 
      * @return $this
      */
     public function inRandomOrder(): self
     {
+        $driver = $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $randomFunc = ($driver === 'pgsql') ? 'RANDOM()' : 'RAND()';
+
         $this->orders[] = [
-            'column' => 'RAND()',
+            'column' => $randomFunc,
             'direction' => ''
         ];
 
@@ -478,7 +488,7 @@ class QueryBuilder
     public function having(string $column, string $operator, $value, string $boolean = 'AND'): self
     {
         $paramName = $this->generateParamName();
-        
+
         $this->havings[] = [
             'column' => $column,
             'operator' => $operator,
@@ -486,9 +496,9 @@ class QueryBuilder
             'boolean' => $boolean,
             'param' => $paramName
         ];
-        
+
         $this->bindings[$paramName] = $value;
-        
+
         return $this;
     }
 
@@ -537,32 +547,50 @@ class QueryBuilder
     }
 
     /**
-     * Executa a consulta e retorna todos os registros como instâncias do modelo
+     * Define relações pra carregar (eager loading)
+     * 
+     * @param array|string $relations Ex: ['posts:title,content', 'profile']
+     * @return $this
+     */
+    public function withRelations(array|string $relations): self
+    {
+        if (is_string($relations)) {
+            $relations = func_get_args();
+        }
+
+        $this->eagerRelations = [];
+        foreach ($relations as $rel) {
+            if (strpos($rel, ':')) {
+                [$name, $colsStr] = explode(':', $rel, 2);
+                $cols = array_map('trim', explode(',', $colsStr));
+                $this->eagerRelations[$name] = $cols;
+            } else {
+                $this->eagerRelations[$rel] = ['*'];
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Executa a consulta e retorna todos os registros como instâncias do modelo (com eager loading)
      * 
      * @return array Array de instâncias do modelo
      */
     public function get(): array
     {
-        $sql = $this->buildSelectSql();
-        
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($this->bindings);
-        
-        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $results = [];
+        $models = $this->buildSelectSqlAndExecute();
 
-        // Converte cada linha em uma instância do modelo
-        foreach ($data as $row) {
-            $model = new $this->modelClass();
-            $model->fill($row);
-            $results[] = $model;
+        // Eager loading se definido
+        if (!empty($this->eagerRelations)) {
+            $this->loadEagerRelations($models);
         }
 
-        return $results;
+        return $models;
     }
 
     /**
-     * Executa a consulta e retorna o primeiro registro como instância do modelo
+     * Executa a consulta e retorna o primeiro registro como instância do modelo (com eager loading)
      * 
      * @return object|null Instância do modelo ou null se não encontrado
      */
@@ -570,25 +598,10 @@ class QueryBuilder
     {
         $originalLimit = $this->limit;
         $this->limit = 1;
-        
-        $sql = $this->buildSelectSql();
-        
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($this->bindings);
-        
-        $data = $stmt->fetch(PDO::FETCH_ASSOC);
-        
+        $models = $this->get();
         $this->limit = $originalLimit;
-        
-        if (!$data) {
-            return null;
-        }
 
-        // Cria uma instância do modelo e preenche com os dados
-        $model = new $this->modelClass();
-        $model->fill($data);
-        
-        return $model;
+        return $models[0] ?? null;
     }
 
     /**
@@ -600,11 +613,11 @@ class QueryBuilder
     public function firstOrFail(): object
     {
         $result = $this->first();
-        
+
         if ($result === null) {
             throw new \Exception("Nenhum registro encontrado para a consulta especificada.");
         }
-        
+
         return $result;
     }
 
@@ -631,11 +644,11 @@ class QueryBuilder
     public function findOrFail($id, string $column = 'id'): object
     {
         $result = $this->find($id, $column);
-        
+
         if ($result === null) {
             throw new \Exception("Registro com ID '$id' não encontrado.");
         }
-        
+
         return $result;
     }
 
@@ -699,7 +712,7 @@ class QueryBuilder
     {
         $select = $key ? [$column, $key] : [$column];
         $results = $this->select($select)->get();
-        
+
         $plucked = [];
         foreach ($results as $result) {
             if ($key) {
@@ -708,7 +721,7 @@ class QueryBuilder
                 $plucked[] = $result->$column;
             }
         }
-        
+
         return $plucked;
     }
 
@@ -798,7 +811,7 @@ class QueryBuilder
     {
         $total = $this->count();
         $results = $this->take($perPage, $page)->get();
-        
+
         return [
             'data' => $results,
             'current_page' => $page,
@@ -821,16 +834,66 @@ class QueryBuilder
     {
         $originalSelect = $this->select;
         $this->select = ["{$function}({$column}) as aggregate"];
-        
+
         $sql = $this->buildSelectSql();
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($this->bindings);
-        
+
         $result = $stmt->fetchColumn();
-        
+
         $this->select = $originalSelect;
-        
+
         return $result;
+    }
+
+    /**
+     * Helper pra executar a query e retornar models
+     * 
+     * @return array Models hidratados
+     */
+    protected function buildSelectSqlAndExecute(): array
+    {
+        $sql = $this->buildSelectSql();
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($this->bindings);
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $results = [];
+        foreach ($data as $row) {
+            $model = new $this->modelClass();
+            $model->fill($row);
+            $results[] = $model;
+        }
+        return $results;
+    }
+
+    /**
+     * Carrega relações eager
+     * 
+     * @param array $models Array de models principais
+     * @return void
+     */
+    protected function loadEagerRelations(array $models): void
+    {
+        if (empty($models)) {
+            return;
+        }
+
+        // Coleta chaves únicas (assume primaryKey = 'id')
+        $keys = array_unique(array_column($models, 'id'));
+
+        foreach ($this->eagerRelations as $name => $columns) {
+            $instance = new $this->modelClass();
+            if (method_exists($instance, $name)) {
+                $relation = $instance->$name();  // Retorna instância de HasOne/BelongsTo/HasMany
+                $relatedQuery = $relation->getRelated()->newQuery()->select($columns);
+                $relatedQuery->whereIn($relation->getForeignKey(), $keys);
+                $results = $relatedQuery->get();
+
+                // Match e seta as relações nos models
+                $relation->match($models, $results, $name);
+            }
+        }
     }
 
     /**
@@ -841,39 +904,39 @@ class QueryBuilder
     protected function buildSelectSql(): string
     {
         $sql = 'SELECT ';
-        
+
         // DISTINCT
         if ($this->distinct) {
             $sql .= 'DISTINCT ';
         }
-        
+
         // SELECT columns
         $sql .= implode(', ', $this->select);
-        
+
         // FROM table
         $sql .= " FROM {$this->table}";
-        
+
         // JOINS
         foreach ($this->joins as $join) {
             $type = strtoupper($join['type']);
             $sql .= " {$type} JOIN {$join['table']} ON {$join['first']} {$join['operator']} {$join['second']}";
         }
-        
+
         // WHERE conditions
         if (!empty($this->wheres)) {
             $sql .= ' WHERE ' . $this->buildWhereClause();
         }
-        
+
         // GROUP BY
         if (!empty($this->groups)) {
             $sql .= ' GROUP BY ' . implode(', ', $this->groups);
         }
-        
+
         // HAVING
         if (!empty($this->havings)) {
             $sql .= ' HAVING ' . $this->buildHavingClause();
         }
-        
+
         // ORDER BY
         if (!empty($this->orders)) {
             $orderClauses = [];
@@ -882,17 +945,17 @@ class QueryBuilder
             }
             $sql .= ' ORDER BY ' . implode(', ', $orderClauses);
         }
-        
+
         // LIMIT
         if ($this->limit !== null) {
             $sql .= " LIMIT {$this->limit}";
         }
-        
+
         // OFFSET
         if ($this->offset > 0) {
             $sql .= " OFFSET {$this->offset}";
         }
-        
+
         return $sql;
     }
 
@@ -904,39 +967,39 @@ class QueryBuilder
     protected function buildWhereClause(): string
     {
         $clauses = [];
-        
+
         foreach ($this->wheres as $index => $where) {
             $boolean = $index === 0 ? '' : $where['boolean'] . ' ';
-            
+
             switch ($where['type']) {
                 case 'basic':
                     $clauses[] = $boolean . "{$where['column']} {$where['operator']} :{$where['param']}";
                     break;
-                    
+
                 case 'in':
                     $clauses[] = $boolean . "{$where['column']} IN (" . implode(', ', $where['values']) . ")";
                     break;
-                    
+
                 case 'not_in':
                     $clauses[] = $boolean . "{$where['column']} NOT IN (" . implode(', ', $where['values']) . ")";
                     break;
-                    
+
                 case 'between':
                     $clauses[] = $boolean . "{$where['column']} BETWEEN :{$where['min_param']} AND :{$where['max_param']}";
                     break;
-                    
+
                 case 'not_between':
                     $clauses[] = $boolean . "{$where['column']} NOT BETWEEN :{$where['min_param']} AND :{$where['max_param']}";
                     break;
-                    
+
                 case 'null':
                     $clauses[] = $boolean . "{$where['column']} IS NULL";
                     break;
-                    
+
                 case 'not_null':
                     $clauses[] = $boolean . "{$where['column']} IS NOT NULL";
                     break;
-                    
+
                 case 'nested':
                     $nestedClause = $where['query']->buildWhereClause();
                     if ($nestedClause) {
@@ -945,7 +1008,7 @@ class QueryBuilder
                     break;
             }
         }
-        
+
         return implode(' ', $clauses);
     }
 
@@ -957,12 +1020,12 @@ class QueryBuilder
     protected function buildHavingClause(): string
     {
         $clauses = [];
-        
+
         foreach ($this->havings as $index => $having) {
             $boolean = $index === 0 ? '' : $having['boolean'] . ' ';
             $clauses[] = $boolean . "{$having['column']} {$having['operator']} :{$having['param']}";
         }
-        
+
         return implode(' ', $clauses);
     }
 
@@ -1024,7 +1087,8 @@ class QueryBuilder
         $this->offset = 0;
         $this->distinct = false;
         $this->paramCount = 0;
-        
+        $this->eagerRelations = [];  // Reset das relações também
+
         return $this;
     }
 }

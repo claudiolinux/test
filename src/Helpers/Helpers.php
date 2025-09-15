@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Slenix\Http\Message\Response;
 use Slenix\Libraries\Template;
 use Slenix\Http\Message\Router;
 use Slenix\Libraries\Session;
@@ -213,6 +214,13 @@ endif;
 if (!function_exists('env')):
     function env(string $key, mixed $default = null): string|int|bool|null {
         return $_ENV[$key] ?? getenv($key) ?? $default;
+    }
+endif;
+
+if (!function_exists('redirect')):
+    function redirect(string $path): void {
+        $response = new Response();
+        $response->redirect($path);
     }
 endif;
 
