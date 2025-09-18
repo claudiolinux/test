@@ -81,7 +81,7 @@ abstract class Model
     }
 
     /**
-     * Preenche atributos sem afetar dirty state (usado no construtor)
+     * Preenche atributos sem afetar dirty state (usado no construtor e quando carrega do banco)
      * 
      * @param array $attributes Atributos para preencher
      * @return void
@@ -89,10 +89,21 @@ abstract class Model
     protected function fillAttributes(array $attributes): void
     {
         foreach ($attributes as $key => $value) {
-            if ($this->isFillable($key)) {
-                $this->attributes[$key] = $this->castAttribute($key, $value);
-            }
+            $this->attributes[$key] = $this->castAttribute($key, $value);
         }
+    }
+
+    /**
+     * NOVO: Método para hidratar modelo vindo do banco (usado pelo QueryBuilder)
+     * 
+     * @param array $attributes
+     * @return static
+     */
+    public static function hydrate(array $attributes): self
+    {
+        $instance = new static();
+        $instance->fillAttributes($attributes);
+        return $instance;
     }
 
     /**
@@ -893,6 +904,16 @@ abstract class Model
     }
 
     /**
+     * NOVO: Implementa JsonSerializable para funcionar automaticamente com json_encode()
+     * 
+     * @return array
+     */
+    public function jsonSerialize(): array
+    {
+        return $this->toArray();
+    }
+
+    /**
      * Recarrega o modelo do banco de dados
      * 
      * @return bool True se recarregou com sucesso
@@ -1022,9 +1043,7 @@ abstract class Model
 
         $results = [];
         while ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $model = new static();
-            $model->fillAttributes($data); // Usa fillAttributes para não afetar dirty
-            $results[] = $model;
+            $results[] = static::hydrate($data); // Usando hydrate ao invés de fillAttributes
         }
 
         return $results;

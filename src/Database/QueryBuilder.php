@@ -573,7 +573,7 @@ class QueryBuilder
     }
 
     /**
-     * Executa a consulta e retorna todos os registros como instâncias do modelo (com eager loading)
+     * CORREÇÃO PRINCIPAL: Executa a consulta e retorna todos os registros como instâncias do modelo (com eager loading)
      * 
      * @return array Array de instâncias do modelo
      */
@@ -590,7 +590,7 @@ class QueryBuilder
     }
 
     /**
-     * Executa a consulta e retorna o primeiro registro como instância do modelo (com eager loading)
+     * CORREÇÃO PRINCIPAL: Executa a consulta e retorna o primeiro registro como instância do modelo (com eager loading)
      * 
      * @return object|null Instância do modelo ou null se não encontrado
      */
@@ -847,9 +847,9 @@ class QueryBuilder
     }
 
     /**
-     * Helper pra executar a query e retornar models
+     * CORREÇÃO PRINCIPAL: Helper pra executar a query e retornar models hidratados corretamente
      * 
-     * @return array Models hidratados
+     * @return array Models hidratados usando o método hydrate
      */
     protected function buildSelectSqlAndExecute(): array
     {
@@ -860,9 +860,8 @@ class QueryBuilder
 
         $results = [];
         foreach ($data as $row) {
-            $model = new $this->modelClass();
-            $model->fill($row);
-            $results[] = $model;
+            // CORREÇÃO: Usa hydrate em vez de fill para hidratar corretamente do banco
+            $results[] = $this->modelClass::hydrate($row);
         }
         return $results;
     }
