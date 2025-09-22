@@ -1,14 +1,7 @@
 {
     "name": "slenix/slenix",
-    "description": "Slenix é um micro framework MVC flexível para construir APIs REST robustas e aplicações web dinâmicas com facilidade.",
-    "keywords": [
-        "framework",
-        "microframework",
-        "php",
-        "mvc",
-        "rest",
-        "slenix"
-    ],
+    "description": "Slenix é um micro framework flexível para construir APIs REST e aplicações web",
+    "keywords": ["slenix", "microframework"],
     "homepage": "https://github.com/claudiovictors/slenix",
     "type": "project",
     "license": "MIT",

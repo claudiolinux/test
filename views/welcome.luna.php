@@ -1,261 +1,141 @@
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="shortcut icon" href="/logo.svg" type="image/x-icon">
-    <title>Welcome to Slenix</title>
-<style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="shortcut icon" href="/logo.svg" type="image/x-icon">
+  <title>Welcome to Slenix</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      text-decoration: none;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
 
-        body {
-            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', monospace;
-            background: #0d1117;
-            color: #f0f6fc;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
+    body {
+      background: #0d0d0f;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
 
-        .terminal {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 12px;
-            width: 90%;
-            max-width: 800px;
-            box-shadow: 0 16px 70px rgba(0, 0, 0, 0.5);
-        }
+    .container {
+      display: flex;
+      background: #111;
+      border-radius: 10px;
+      overflow: hidden;
+      max-width: 950px;
+      width: 100%;
+      box-shadow: -2px 2px 6px rgb(0 0 0 / 39%);
+    }
 
-        .terminal-header {
-            background: #21262d;
-            padding: 12px 16px;
-            border-radius: 12px 12px 0 0;
-            border-bottom: 1px solid #30363d;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+    .left {
+      flex: 1;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
 
-        .terminal-buttons {
-            display: flex;
-            gap: 6px;
-        }
+    .left h1 {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+    }
 
-        .btn-circle {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            border: none;
-        }
+    .left p {
+      margin-bottom: 25px;
+      color: #aaa;
+    }
 
-        .btn-close {
-            background: #ff5f57;
-        }
+    .left ul {
+      list-style: none;
+      margin-bottom: 25px;
+    }
 
-        .btn-minimize {
-            background: #ffbd2e;
-        }
+    .left ul li {
+      margin: 10px 0;
+    }
 
-        .btn-maximize {
-            background: #28ca42;
-        }
+    .left ul li a {
+      color: #ff2d55;
+      text-decoration: none;
+      font-weight: bold;
+    }
 
-        .terminal-title {
-            color: #8b949e;
-            font-size: 13px;
-            margin-left: 12px;
-        }
+    .left a:hover {
+      text-decoration: underline;
+    }
 
-        .terminal-body {
-            padding: 24px;
-            min-height: 400px;
-        }
+    .btn {
+      background: #ff2d55;
+      color: #fff;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      width: fit-content;
+    }
 
-        .prompt-line {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
-        }
+    .btn:hover {
+      background: #e62b4f;
+    }
 
-        .prompt {
-            color: #7c3aed;
-            margin-right: 8px;
-            font-weight: 600;
-        }
+    .right {
+      flex: 1;
+      background: linear-gradient(135deg, #ff2d55, #ff8c00);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
 
-        .command {
-            color: #f0f6fc;
-        }
+    .right h2 {
+      font-size: 5rem;
+      font-weight: bold;
+      color: rgba(255, 255, 255, 0.1);
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      -webkit-text-stroke: 1px #fff;
+    }
 
-        .logo-art {
-            color: #7c3aed;
-            font-size: 14px;
-            line-height: 1.2;
-            margin: 15px 0;
-            white-space: pre;
-        }
+    .logo {
+      font-size: 2.8rem;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 0 0 15px rgba(255, 45, 85, 0.8);
+    }
 
-        .info-section {
-            margin: 20px 0;
-        }
-
-        .info-line {
-            display: flex;
-            margin-bottom: 4px;
-        }
-
-        .info-label {
-            color: #58a6ff;
-            min-width: 120px;
-        }
-
-        .info-value {
-            color: #f0f6fc;
-        }
-
-        .commands-section {
-            margin-top: 24px;
-            padding-top: 16px;
-            border-top: 1px solid #30363d;
-        }
-
-        .command-item {
-            display: flex;
-            margin-bottom: 8px;
-            align-items: center;
-        }
-
-        .command-name {
-            color: #f85149;
-            min-width: 140px;
-            font-weight: 600;
-        }
-
-        .command-desc {
-            color: #8b949e;
-        }
-
-        .status-indicator {
-            color: #3fb950;
-            margin-right: 8px;
-        }
-
-        .cursor {
-            background: #f0f6fc;
-            animation: blink 1s infinite;
-            width: 8px;
-            height: 18px;
-            display: inline-block;
-            margin-left: 4px;
-        }
-
-        @keyframes blink {
-
-            0%,
-            50% {
-                opacity: 1;
-            }
-
-            51%,
-            100% {
-                opacity: 0;
-            }
-        }
-
-        .version-badge {
-            background: #238636;
-            color: #f0f6fc;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        @media (max-width: 768px) {
-            .terminal {
-                width: 95%;
-                margin: 20px;
-            }
-
-            .terminal-body {
-                padding: 16px;
-            }
-
-            .logo-art {
-                font-size: 12px;
-            }
-
-            .command-item {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 4px;
-            }
-
-            .command-name {
-                min-width: auto;
-            }
-        }
-    </style>
+    .svg-icon {
+      width: 16px;
+      height: 16px;
+      vertical-align: middle;
+      margin-right: 8px;
+      fill: #ff2d55;
+    }
+  </style>
 </head>
-
 <body>
-    <div class="terminal">
-        <div class="terminal-header">
-            <div class="terminal-buttons">
-                <div class="btn-circle btn-close"></div>
-                <div class="btn-circle btn-minimize"></div>
-                <div class="btn-circle btn-maximize"></div>
-            </div>
-            <div class="terminal-title">slenix — framework info</div>
-        </div>
-
-        <div class="terminal-body">
-            <div class="prompt-line">
-                <span class="prompt">$</span>
-                <span class="command">welcome {{ env('APP_NAME') }}</span>
-            </div>
-
-<div class="logo-art">
- _____ _            _     
-/ ____| |          (_)    
-| (___| | ___ _ __  ___  __
-\___ \| |/ _ \ '_ \| \ \/ /
-____) | |  __/ | | | |>  < 
-|_____/|_|\___|_| |_|_/_/\_\</div>
-
-                    <div class="info-section">
-                        <div class="info-line">
-                            <span class="info-label">Framework:</span>
-                            <span class="info-value">Slenix MVC <span class="version-badge">v{{ env('APP_VERSION')
-                                    }}</span></span>
-                        </div>
-                        <div class="info-line">
-                            <span class="info-label">Language:</span>
-                            <span class="info-value">PHP 8.0+</span>
-                        </div>
-                        <div class="info-line">
-                            <span class="info-label">Architecture: </span>
-                            <span class="info-value">Model-View-Controller</span>
-                        </div>
-                        <div class="info-line">
-                            <span class="info-label">Status: </span>
-                            <span class="status-indicator">●</span>
-                            <span class="info-value">Ready for development</span>
-                        </div>
-                    </div>
-
-                    <div class="prompt-line" style="margin-top: 24px;">
-                        <span class="prompt">$</span>
-                        <span class="command"></span>
-                        <span class="cursor"></span>
-                    </div>
-            </div>
-        </div>            
+  <div class="container">
+    <div class="left">
+      <h1>Let's get started</h1>
+      <p>{{ env('APP_NAME') }} has an incredibly rich ecosystem. We suggest starting with the following.</p>
+      <ul>
+        <li><svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg> <a href="https://github.com/claudiovictors/slenix" target="_blank">Read the Documentation</a></li>
+        <li><svg class="svg-icon" viewBox="0 0 24 24"><path d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg> <a href="http://instagram.com/slenixphp" target="_blank">Watch video tutorials & screencasts</a></li>
+      </ul>
+      <a href="https://github.com/claudiovictors/slenix" target="_blank" class="btn">Deploy now</a>
+    </div>
+    <div class="right">
+      <div class="logo">{{ env('APP_NAME') }}</div>
+      <h2>{{ env('APP_VERSION') }}</h2>
+    </div>
+  </div>
 </body>
 </html>

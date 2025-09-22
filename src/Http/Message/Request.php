@@ -2,12 +2,22 @@
 
 /*
 |--------------------------------------------------------------------------
-| Classe Request
+| Classe Request Melhorada
 |--------------------------------------------------------------------------
 |
 | Esta classe representa um pedido HTTP, encapsulando informações como
 | parâmetros da rota, método HTTP, URI, dados de entrada (POST, GET),
 | arquivos, cookies, cabeçalhos, IP do cliente e user agent.
+|
+| Melhorias implementadas:
+| - Lazy loading para melhor performance
+| - Validação robusta de dados
+| - Melhor tratamento de erros
+| - Suporte a múltiplos Content-Types
+| - Cache interno para operações custosas
+| - Métodos utilitários adicionais
+| - Correção para evitar erro de chave indefinida em uploads de arquivos
+| - Garantia de que normalizeHeaderName() está presente e reconhecido
 |
 */
 
@@ -20,38 +30,56 @@ use Slenix\Exceptions\UploadException;
 use Slenix\Http\Message\Upload;
 
 /**
- * Classe que representa um pedido HTTP.
+ * Classe que representa um pedido HTTP com funcionalidades avançadas.
  */
 class Request
 {
-    /**
-     * Parâmetros da rota extraídos da URI.
-     *
-     * @var array<string, string>
-     */
+    // Propriedades principais
     private array $params = [];
     private array $server = [];
     private array $headers = [];
-    protected array $jsonData = [];
     private array $attributes = [];
-    private array $parsedBody = [];
     private array $queryParams = [];
+    
+    // Cache para lazy loading
+    private ?array $parsedBody = null;
     private ?array $uploadedFiles = null;
+    private ?string $rawBody = null;
+    private ?array $deviceInfo = null;
+    private ?array $acceptableLanguages = null;
+    
+    // Configurações
+    private int $maxInputSize = 8388608; // 8MB
+    private array $trustedProxies = [];
+    private array $trustedHeaders = [
+        'X-Forwarded-For',
+        'X-Forwarded-Proto',
+        'X-Forwarded-Host',
+        'X-Forwarded-Port'
+    ];
 
     /**
      * Construtor da classe Request.
      *
      * @param array<string, string> $params Array associativo contendo os parâmetros da rota.
+     * @param array $server Dados do servidor (padrão $_SERVER)
+     * @param array $query Dados da query string (padrão $_GET)
+     * @param array $cookies Dados dos cookies (padrão $_COOKIE)
+     * @param array $files Dados dos arquivos (padrão $_FILES)
      */
-    public function __construct(array $params = [])
-    {
-        $this->parseJson();
+    public function __construct(
+        array $params = [],
+        array $server = [],
+        array $query = [],
+        array $cookies = [],
+        array $files = []
+    ) {
         $this->params = $params;
-        $this->server = $_SERVER;
-        $this->queryParams = $_GET;
-        $this->parsedBody();
+        $this->server = $server ?: $_SERVER;
+        $this->queryParams = $query ?: ($_GET ?? []);
+        
         $this->parseHeaders();
-        $this->parseUploadedFiles();
+        $this->validateRequest();
     }
 
     /**
@@ -90,22 +118,45 @@ class Request
     }
 
     /**
+     * Define múltiplos parâmetros da rota.
+     *
+     * @param array $params
+     * @return self
+     */
+    public function setParams(array $params): self
+    {
+        $this->params = array_merge($this->params, $params);
+        return $this;
+    }
+
+    // ========== MÉTODOS HTTP E URI ==========
+
+    /**
      * Retorna o método HTTP da requisição.
      *
      * @return string O método HTTP em maiúsculas.
      */
     public function method(): string
     {
+        // Cache para evitar reprocessamento
+        static $method = null;
+        
+        if ($method !== null) {
+            return $method;
+        }
+
         // Verifica método override via header ou campo oculto
         $overrideMethod = $this->getHeader('X-HTTP-Method-Override')
             ?? $this->input('_method')
             ?? null;
 
         if ($overrideMethod && $this->isMethod('POST')) {
-            return strtoupper($overrideMethod);
+            $method = strtoupper((string) $overrideMethod);
+        } else {
+            $method = strtoupper($this->server['REQUEST_METHOD'] ?? 'GET');
         }
 
-        return strtoupper($this->server['REQUEST_METHOD'] ?? 'GET');
+        return $method;
     }
 
     /**
@@ -115,7 +166,13 @@ class Request
      */
     public function uri(): string
     {
-        return parse_url($this->server['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+        static $uri = null;
+        
+        if ($uri === null) {
+            $uri = parse_url($this->server['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+        }
+        
+        return $uri;
     }
 
     /**
@@ -135,11 +192,35 @@ class Request
      */
     public function url(): string
     {
-        $scheme = $this->isSecure() ? 'https' : 'http';
-        $host = $this->getHost();
-        $uri = $this->fullUri();
+        static $url = null;
+        
+        if ($url === null) {
+            $scheme = $this->getScheme();
+            $host = $this->getHost();
+            $port = $this->getPort();
+            $uri = $this->fullUri();
 
-        return "{$scheme}://{$host}{$uri}";
+            // Inclui porta apenas se não for padrão
+            $portString = '';
+            if (($scheme === 'http' && $port !== 80) || ($scheme === 'https' && $port !== 443)) {
+                $portString = ':' . $port;
+            }
+
+            $url = "{$scheme}://{$host}{$portString}{$uri}";
+        }
+        
+        return $url;
+    }
+
+    /**
+     * Retorna apenas a URL base (sem query string).
+     *
+     * @return string
+     */
+    public function baseUrl(): string
+    {
+        $url = $this->url();
+        return strtok($url, '?') ?: $url;
     }
 
     /**
@@ -149,30 +230,17 @@ class Request
      */
     public function queryString(): ?string
     {
-        return parse_url($this->server['REQUEST_URI'] ?? '/', PHP_URL_QUERY);
-    }
-
-    /**
-     * Detecta se o body é JSON e guarda os dados
-     *
-     * @return void
-     */
-    protected function parseJson(): void
-    {
-        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-
-        if (stripos($contentType, 'application/json') !== false) {
-            $raw = file_get_contents('php://input');
-            $decoded = json_decode($raw, true);
-
-            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                $this->jsonData = $decoded;
-            }
+        static $queryString = null;
+        
+        if ($queryString === null) {
+            $queryString = parse_url($this->server['REQUEST_URI'] ?? '/', PHP_URL_QUERY);
         }
+        
+        return $queryString;
     }
 
     /**
-     * Retorna um valor de entrada (POST, GET ou corpo parseado).
+     * Retorna um valor de entrada (POST, GET, JSON ou corpo parseado).
      *
      * @param string $key A chave do valor de entrada.
      * @param mixed $default Valor padrão
@@ -180,39 +248,43 @@ class Request
      */
     public function input(string $key, mixed $default = null): mixed
     {
-        if (array_key_exists($key, $this->jsonData)) {
-            return $this->jsonData[$key];
+        // Ordem de prioridade: JSON -> POST -> GET
+        $parsedBody = $this->getParsedBody();
+        
+        if (array_key_exists($key, $parsedBody)) {
+            return $parsedBody[$key];
         }
 
         if (isset($_POST[$key])) {
             return $_POST[$key];
         }
 
-        if (isset($_GET[$key])) {
-            return $_GET[$key];
+        if (isset($this->queryParams[$key])) {
+            return $this->queryParams[$key];
         }
 
         return $default;
     }
 
     /**
-     * Retorna todos os dados de entrada.
+     * Retorna todos os dados de entrada combinados.
      *
      * @return array
      */
     public function all(): array
     {
-        return array_merge($this->queryParams, $_POST, $this->parsedBody);
+        return array_merge($this->queryParams, $_POST, $this->getParsedBody());
     }
 
     /**
      * Retorna apenas os campos especificados.
      *
-     * @param array $keys
+     * @param array|string $keys
      * @return array
      */
-    public function only(array $keys): array
+    public function only(array|string $keys): array
     {
+        $keys = is_string($keys) ? func_get_args() : $keys;
         $data = $this->all();
         return array_intersect_key($data, array_flip($keys));
     }
@@ -220,11 +292,12 @@ class Request
     /**
      * Retorna todos os campos exceto os especificados.
      *
-     * @param array $keys
+     * @param array|string $keys
      * @return array
      */
-    public function except(array $keys): array
+    public function except(array|string $keys): array
     {
+        $keys = is_string($keys) ? func_get_args() : $keys;
         $data = $this->all();
         return array_diff_key($data, array_flip($keys));
     }
@@ -241,6 +314,22 @@ class Request
     }
 
     /**
+     * Verifica se múltiplos campos existem.
+     *
+     * @param array $keys
+     * @return bool
+     */
+    public function hasAny(array $keys): bool
+    {
+        foreach ($keys as $key) {
+            if ($this->has($key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Verifica se um campo existe e não está vazio.
      *
      * @param string $key
@@ -249,7 +338,35 @@ class Request
     public function filled(string $key): bool
     {
         $value = $this->input($key);
-        return $value !== null && $value !== '' && $value !== [];
+        
+        if ($value === null) {
+            return false;
+        }
+
+        if (is_string($value)) {
+            return trim($value) !== '';
+        }
+
+        if (is_array($value)) {
+            return !empty($value);
+        }
+
+        if (is_bool($value)) {
+            return true;
+        }
+
+        return $value !== '' && $value !== 0 && $value !== '0';
+    }
+
+    /**
+     * Verifica se um campo está vazio ou ausente.
+     *
+     * @param string $key
+     * @return bool
+     */
+    public function missing(string $key): bool
+    {
+        return !$this->filled($key);
     }
 
     /**
@@ -309,53 +426,6 @@ class Request
     }
 
     /**
-     * Retorna uma nova instância da classe Upload para o arquivo especificado.
-     *
-     * Este método encapsula o array global $_FILES, proporcionando uma interface
-     * orientada a objetos para o arquivo.
-     *
-     * @param string $key A chave do arquivo no array $_FILES.
-     * @return Upload
-     * @throws UploadException Se ocorrer um erro no upload do PHP.
-     */
-    public function file(string $key): Upload
-    {
-        if (!$this->hasFile($key)) {
-            throw new UploadException(UPLOAD_ERR_NO_FILE);
-        }
-
-        // Retorna uma instância da nossa classe Upload, que lida com validações e movimentação.
-        return new Upload($_FILES[$key]);
-    }
-
-    /**
-     * Retorna todos os arquivos enviados.
-     *
-     * @return array<string, Upload> Uma lista de objetos Upload.
-     */
-    public function files(): array
-    {
-        $files = [];
-        if (!empty($_FILES)) {
-            foreach ($_FILES as $key => $fileData) {
-                if ($fileData['error'] !== UPLOAD_ERR_NO_FILE) {
-                    // Verifica se é um upload de múltiplos arquivos
-                    if (is_array($fileData['name'])) {
-                        $normalizedFiles = $this->normalizeNestedFiles($fileData);
-                        foreach ($normalizedFiles as $index => $normalizedFile) {
-                            $files[$key . '_' . $index] = new Upload($normalizedFile);
-                        }
-                    } else {
-                        $files[$key] = new Upload($fileData);
-                    }
-                }
-            }
-        }
-        return $files;
-    }
-
-
-    /**
      * Verifica se um arquivo foi enviado.
      *
      * @param string $key
@@ -363,7 +433,143 @@ class Request
      */
     public function hasFile(string $key): bool
     {
-        return isset($_FILES[$key]) && is_array($_FILES[$key]) && $_FILES[$key]['error'] !== UPLOAD_ERR_NO_FILE;
+        // Verifica se $_FILES[$key] existe, é um array e contém todas as chaves necessárias
+        if (!isset($_FILES[$key]) || !is_array($_FILES[$key])) {
+            return false;
+        }
+
+        // Verifica chaves obrigatórias para um arquivo único
+        $requiredKeys = ['name', 'tmp_name', 'size', 'error'];
+        foreach ($requiredKeys as $requiredKey) {
+            if (!array_key_exists($requiredKey, $_FILES[$key]) || 
+                (is_array($_FILES[$key][$requiredKey]) && !isset($_FILES[$key]['name'][0]))) {
+                error_log("Erro no upload: Chave obrigatória '{$requiredKey}' ausente ou inválida para a chave '{$key}'.");
+                return false;
+            }
+        }
+
+        // Para arquivos únicos, verifica se é válido
+        if (!is_array($_FILES[$key]['name'])) {
+            return $_FILES[$key]['error'] !== UPLOAD_ERR_NO_FILE && !empty($_FILES[$key]['tmp_name']);
+        }
+
+        // Para múltiplos arquivos, verifica se pelo menos um é válido
+        return is_array($_FILES[$key]['name']) && !empty($_FILES[$key]['name'][0]);
+    }
+
+    /**
+     * Retorna uma nova instância da classe Upload para o arquivo especificado.
+     *
+     * @param string $key A chave do arquivo no array $_FILES.
+     * @return Upload
+     * @throws UploadException Se ocorrer um erro no upload do PHP ou se o array estiver incompleto.
+     */
+    public function file(string $key): Upload
+    {
+        if (!$this->hasFile($key)) {
+            throw new UploadException(UPLOAD_ERR_NO_FILE);
+        }
+
+        // Verifica se é um arquivo único (não array)
+        if (!is_array($_FILES[$key]['name'])) {
+            return new Upload($_FILES[$key]);
+        }
+
+        // Para múltiplos arquivos, retorna o primeiro arquivo válido
+        $normalizedFiles = $this->normalizeNestedFiles($_FILES[$key]);
+        if (empty($normalizedFiles)) {
+            throw new UploadException(UPLOAD_ERR_NO_FILE);
+        }
+
+        return new Upload($normalizedFiles[0]);
+    }
+
+    /**
+     * Retorna todos os arquivos enviados como objetos Upload.
+     *
+     * @return array<string, Upload>
+     */
+    public function files(): array
+    {
+        if ($this->uploadedFiles === null) {
+            $this->uploadedFiles = [];
+
+            foreach ($_FILES as $key => $fileData) {
+                // Usa hasFile() para validar a entrada
+                if (!$this->hasFile($key)) {
+                    error_log("Erro no upload: Arquivo inválido ou ausente para a chave '{$key}'.");
+                    continue;
+                }
+
+                try {
+                    if (is_array($fileData['name'])) {
+                        // Lida com múltiplos arquivos
+                        $normalizedFiles = $this->normalizeNestedFiles($fileData);
+                        foreach ($normalizedFiles as $index => $normalizedFile) {
+                            if ($normalizedFile['error'] !== UPLOAD_ERR_NO_FILE && 
+                                !empty($normalizedFile['tmp_name'])) {
+                                $this->uploadedFiles["{$key}_{$index}"] = new Upload($normalizedFile);
+                            }
+                        }
+                    } else {
+                        // Arquivo único
+                        if ($fileData['error'] !== UPLOAD_ERR_NO_FILE && 
+                            !empty($fileData['tmp_name'])) {
+                            $this->uploadedFiles[$key] = new Upload($fileData);
+                        }
+                    }
+                } catch (UploadException $e) {
+                    error_log("Erro no upload do arquivo {$key}: " . $e->getMessage());
+                }
+            }
+        }
+
+        return $this->uploadedFiles;
+    }
+
+    /**
+     * Normaliza arquivos aninhados para múltiplos uploads.
+     *
+     * @param array $fileData
+     * @return array
+     */
+    private function normalizeNestedFiles(array $fileData): array
+    {
+        $normalized = [];
+        $count = is_array($fileData['name']) ? count($fileData['name']) : 1;
+
+        if (!is_array($fileData['name'])) {
+            // Arquivo único
+            if (isset($fileData['name'], $fileData['tmp_name'], $fileData['size'], $fileData['error'])) {
+                $normalized[] = [
+                    'name' => $fileData['name'],
+                    'type' => $fileData['type'] ?? '',
+                    'tmp_name' => $fileData['tmp_name'],
+                    'error' => $fileData['error'],
+                    'size' => $fileData['size']
+                ];
+            }
+            return $normalized;
+        }
+
+        // Múltiplos arquivos
+        for ($i = 0; $i < $count; $i++) {
+            if (!isset($fileData['name'][$i], $fileData['tmp_name'][$i], 
+                      $fileData['size'][$i], $fileData['error'][$i])) {
+                error_log("Erro no upload: Array de arquivo aninhado incompleto no índice {$i} para a chave.");
+                continue;
+            }
+
+            $normalized[$i] = [
+                'name' => $fileData['name'][$i],
+                'type' => $fileData['type'][$i] ?? '',
+                'tmp_name' => $fileData['tmp_name'][$i],
+                'error' => $fileData['error'][$i],
+                'size' => $fileData['size'][$i]
+            ];
+        }
+
+        return $normalized;
     }
 
     /**
@@ -389,13 +595,30 @@ class Request
     }
 
     /**
-     * Retorna o endereço IP do cliente.
+     * Retorna o endereço IP do cliente (considerando proxies confiáveis).
      *
      * @return ?string O IP do cliente ou null.
      */
     public function ip(): ?string
     {
+        static $ip = null;
+        
+        if ($ip !== null) {
+            return $ip;
+        }
+
+        // Se há proxies confiáveis, verifica headers de forwarding
+        if (!empty($this->trustedProxies)) {
+            $forwardedIp = $this->getForwardedIp();
+            if ($forwardedIp) {
+                $ip = $forwardedIp;
+                return $ip;
+            }
+        }
+
+        // Headers padrão para detecção de IP
         $headers = [
+            'HTTP_CF_CONNECTING_IP',     // Cloudflare
             'HTTP_CLIENT_IP',
             'HTTP_X_FORWARDED_FOR',
             'HTTP_X_FORWARDED',
@@ -408,15 +631,17 @@ class Request
         foreach ($headers as $header) {
             if (!empty($this->server[$header])) {
                 $ips = explode(',', $this->server[$header]);
-                $ip = trim($ips[0]);
+                $cleanIp = trim($ips[0]);
 
-                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                if ($this->isValidIp($cleanIp)) {
+                    $ip = $cleanIp;
                     return $ip;
                 }
             }
         }
 
-        return $this->server['REMOTE_ADDR'] ?? null;
+        $ip = $this->server['REMOTE_ADDR'] ?? null;
+        return $ip;
     }
 
     /**
@@ -436,6 +661,15 @@ class Request
      */
     public function getHost(): string
     {
+        // Verifica headers de proxy confiável primeiro
+        if (!empty($this->trustedProxies)) {
+            $forwardedHost = $this->getHeader('X-Forwarded-Host');
+            if ($forwardedHost && $this->isTrustedProxy($this->server['REMOTE_ADDR'] ?? '')) {
+                $hosts = explode(',', $forwardedHost);
+                return trim($hosts[0]);
+            }
+        }
+
         return $this->server['HTTP_HOST'] ?? $this->server['SERVER_NAME'] ?? 'localhost';
     }
 
@@ -446,7 +680,15 @@ class Request
      */
     public function getPort(): int
     {
-        return (int) ($this->server['SERVER_PORT'] ?? 80);
+        // Verifica header de proxy confiável primeiro
+        if (!empty($this->trustedProxies)) {
+            $forwardedPort = $this->getHeader('X-Forwarded-Port');
+            if ($forwardedPort && $this->isTrustedProxy($this->server['REMOTE_ADDR'] ?? '')) {
+                return (int) $forwardedPort;
+            }
+        }
+
+        return (int) ($this->server['SERVER_PORT'] ?? ($this->isSecure() ? 443 : 80));
     }
 
     /**
@@ -466,23 +708,41 @@ class Request
      */
     public function isSecure(): bool
     {
-        return (
+        static $isSecure = null;
+        
+        if ($isSecure !== null) {
+            return $isSecure;
+        }
+
+        // Verifica headers de proxy confiável primeiro
+        if (!empty($this->trustedProxies)) {
+            $forwardedProto = $this->getHeader('X-Forwarded-Proto');
+            if ($forwardedProto && $this->isTrustedProxy($this->server['REMOTE_ADDR'] ?? '')) {
+                $isSecure = strtolower($forwardedProto) === 'https';
+                return $isSecure;
+            }
+        }
+
+        $isSecure = (
             (!empty($this->server['HTTPS']) && $this->server['HTTPS'] !== 'off') ||
             (!empty($this->server['HTTP_X_FORWARDED_PROTO']) && $this->server['HTTP_X_FORWARDED_PROTO'] === 'https') ||
             (!empty($this->server['HTTP_X_FORWARDED_SSL']) && $this->server['HTTP_X_FORWARDED_SSL'] === 'on') ||
             $this->getPort() === 443
         );
+        
+        return $isSecure;
     }
 
     /**
      * Verifica se o método da requisição corresponde ao fornecido.
      *
-     * @param string $method O método HTTP a comparar.
+     * @param string|array $methods O(s) método(s) HTTP a comparar.
      * @return bool
      */
-    public function isMethod(string $method): bool
+    public function isMethod(string|array $methods): bool
     {
-        return $this->method() === strtoupper($method);
+        $methods = is_string($methods) ? [$methods] : $methods;
+        return in_array($this->method(), array_map('strtoupper', $methods));
     }
 
     /**
@@ -528,6 +788,19 @@ class Request
     }
 
     /**
+     * Verifica se a requisição aceita HTML.
+     *
+     * @return bool
+     */
+    public function acceptsHtml(): bool
+    {
+        $acceptable = $this->getHeader('Accept', '');
+        return str_contains(strtolower($acceptable), 'text/html');
+    }
+
+    // ========== CABEÇALHOS HTTP ==========
+
+    /**
      * Obtém um cabeçalho HTTP específico.
      *
      * @param string $name Nome do cabeçalho
@@ -536,7 +809,7 @@ class Request
      */
     public function getHeader(string $name, mixed $default = null): mixed
     {
-        $name = str_replace('_', '-', strtoupper($name));
+        $name = $this->normalizeHeaderName($name);
         return $this->headers[$name] ?? $default;
     }
 
@@ -558,8 +831,30 @@ class Request
      */
     public function hasHeader(string $name): bool
     {
-        $name = str_replace('_', '-', strtoupper($name));
+        $name = $this->normalizeHeaderName($name);
         return isset($this->headers[$name]);
+    }
+
+    /**
+     * Retorna o valor de um cabeçalho como string.
+     *
+     * @param string $name
+     * @param string|null $default
+     * @return string|null
+     */
+    public function getHeaderLine(string $name, ?string $default = null): ?string
+    {
+        $header = $this->getHeader($name);
+
+        if ($header === null) {
+            return $default;
+        }
+
+        if (is_array($header)) {
+            return implode(', ', $header);
+        }
+
+        return (string) $header;
     }
 
     /**
@@ -610,177 +905,17 @@ class Request
     }
 
     /**
-     * Parse dos cabeçalhos HTTP.
-     *
-     * @return void
-     */
-    private function parseHeaders(): void
-    {
-        foreach ($this->server as $key => $value) {
-            if (str_starts_with($key, 'HTTP_')) {
-                $headerName = str_replace('_', '-', substr($key, 5));
-                $this->headers[$headerName] = $value;
-            }
-        }
-
-        // Adiciona cabeçalhos especiais que não começam com HTTP_
-        $specialHeaders = [
-            'CONTENT_TYPE' => 'CONTENT-TYPE',
-            'CONTENT_LENGTH' => 'CONTENT-LENGTH',
-            'CONTENT_MD5' => 'CONTENT-MD5'
-        ];
-
-        foreach ($specialHeaders as $serverKey => $headerName) {
-            if (isset($this->server[$serverKey])) {
-                $this->headers[$headerName] = $this->server[$serverKey];
-            }
-        }
-    }
-
-    /**
-     * Parse do corpo da requisição baseado no Content-Type.
-     *
-     * @return void
-     */
-    private function parsedBody(): void
-    {
-        $input = file_get_contents('php://input');
-
-        if (empty($input)) {
-            $this->parsedBody = [];
-            return;
-        }
-
-        $contentType = $this->getHeader('Content-Type', '');
-
-        if (str_contains($contentType, 'application/json')) {
-            $decoded = json_decode($input, true);
-            $this->parsedBody = $decoded ?? [];
-
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                throw new InvalidArgumentException('JSON inválido: ' . json_last_error_msg());
-            }
-        } elseif (str_contains($contentType, 'application/x-www-form-urlencoded')) {
-            parse_str($input, $this->parsedBody);
-        } elseif (str_contains($contentType, 'application/xml') || str_contains($contentType, 'text/xml')) {
-            $this->parseXmlBody($input);
-        } else {
-            // Para outros tipos, armazena o conteúdo bruto
-            $this->parsedBody = ['_raw' => $input];
-        }
-    }
-
-    /**
-     * Parse do corpo XML.
-     *
-     * @param string $input
-     * @return void
-     */
-    private function parseXmlBody(string $input): void
-    {
-        libxml_use_internal_errors(true);
-        $xml = simplexml_load_string($input, 'SimpleXMLElement', LIBXML_NOCDATA);
-
-        if ($xml !== false) {
-            $this->parsedBody = json_decode(json_encode($xml), true);
-        } else {
-            $this->parsedBody = ['_raw' => $input];
-        }
-    }
-
-    /**
-     * Parse dos arquivos enviados.
-     *
-     * @return void
-     */
-    private function parseUploadedFiles(): void
-    {
-        $this->uploadedFiles = [];
-
-        if (empty($_FILES)) {
-            return;
-        }
-
-        foreach ($_FILES as $key => $file) {
-            if (is_array($file['name'])) {
-                $this->uploadedFiles[$key] = $this->normalizeNestedFiles($file);
-            } else {
-                $this->uploadedFiles[$key] = $this->normalizeFile($file);
-            }
-        }
-    }
-
-    /**
-     * Normaliza um arquivo enviado.
-     *
-     * @param array $file
-     * @return array
-     */
-    private function normalizeFile(array $file): array
-    {
-        return [
-            'name' => $file['name'],
-            'type' => $file['type'] ?? null,
-            'size' => $file['size'],
-            'tmp_name' => $file['tmp_name'],
-            'error' => $file['error'],
-            'extension' => pathinfo($file['name'], PATHINFO_EXTENSION),
-            'is_valid' => $file['error'] === UPLOAD_ERR_OK,
-            'mime_type' => $this->getFileMimeType($file['tmp_name']),
-        ];
-    }
-
-    /**
-     * Normaliza arquivos aninhados (múltiplos arquivos).
-     *
-     * @param array $files
-     * @return array
-     */
-    private function normalizeNestedFiles(array $files): array
-    {
-        $normalized = [];
-        foreach ($files['name'] as $index => $name) {
-            $normalized[$index] = [
-                'name' => $name,
-                'type' => $files['type'][$index] ?? null,
-                'size' => $files['size'][$index],
-                'tmp_name' => $files['tmp_name'][$index],
-                'error' => $files['error'][$index],
-            ];
-        }
-        return $normalized;
-    }
-
-    /**
-     * Obtém o MIME type de um arquivo.
-     *
-     * @param string $filePath
-     * @return string|null
-     */
-    private function getFileMimeType(string $filePath): ?string
-    {
-        if (!file_exists($filePath)) {
-            return null;
-        }
-
-        if (function_exists('finfo_file')) {
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $mimeType = finfo_file($finfo, $filePath);
-            finfo_close($finfo);
-            return $mimeType ?: null;
-        }
-
-        return mime_content_type($filePath) ?: null;
-    }
-
-    /**
      * Obtém o corpo da requisição parseado.
      *
      * @return array
      */
     public function getParsedBody(): array
     {
-        return $this->parsedBody;
+        if ($this->parsedBody === null) {
+            $this->parsedBody();
+        }
+        
+        return $this->parsedBody ?? [];
     }
 
     /**
@@ -790,7 +925,26 @@ class Request
      */
     public function getRawBody(): string
     {
-        return file_get_contents('php://input');
+        if ($this->rawBody === null) {
+            $this->rawBody = file_get_contents('php://input');
+            
+            // Verifica o tamanho do corpo
+            if (strlen($this->rawBody) > $this->maxInputSize) {
+                throw new InvalidArgumentException('Corpo da requisição muito grande');
+            }
+        }
+        
+        return $this->rawBody;
+    }
+
+    /**
+     * Verifica se o corpo da requisição está vazio.
+     *
+     * @return bool
+     */
+    public function hasBody(): bool
+    {
+        return !empty($this->getRawBody());
     }
 
     /**
@@ -809,8 +963,10 @@ class Request
         return $this->server[$key] ?? $default;
     }
 
+    // ========== VALIDAÇÃO E SANITIZAÇÃO ==========
+
     /**
-     * Valida se os campos obrigatórios estão presentes.
+     * Valida se os campos obrigatórios estão presentes e preenchidos.
      *
      * @param array $required
      * @return array Lista de campos faltando
@@ -829,32 +985,10 @@ class Request
     }
 
     /**
-     * Retorna o valor de um cabeçalho como string.
-     *
-     * @param string $name
-     * @param string|null $default
-     * @return string|null
-     */
-    public function getHeaderLine(string $name, ?string $default = null): ?string
-    {
-        $header = $this->getHeader($name);
-
-        if ($header === null) {
-            return $default;
-        }
-
-        if (is_array($header)) {
-            return implode(', ', $header);
-        }
-
-        return (string) $header;
-    }
-
-    /**
      * Sanitiza um valor de entrada.
      *
      * @param string $key
-     * @param string $filter Tipo de filtro ('string', 'email', 'url', 'int', 'float')
+     * @param string $filter Tipo de filtro
      * @param mixed $default
      * @return mixed
      */
@@ -862,20 +996,43 @@ class Request
     {
         $value = $this->input($key, $default);
 
-        if ($value === null) {
+        if ($value === null || $value === $default) {
             return $default;
         }
 
         return match ($filter) {
-            'string' => filter_var($value, FILTER_SANITIZE_STRING),
+            'string' => htmlspecialchars(strip_tags((string) $value), ENT_QUOTES, 'UTF-8'),
             'email' => filter_var($value, FILTER_SANITIZE_EMAIL),
             'url' => filter_var($value, FILTER_SANITIZE_URL),
             'int' => filter_var($value, FILTER_SANITIZE_NUMBER_INT),
             'float' => filter_var($value, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION),
-            'html' => htmlspecialchars($value, ENT_QUOTES, 'UTF-8'),
+            'html' => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8'),
+            'trim' => trim((string) $value),
+            'lower' => strtolower((string) $value),
+            'upper' => strtoupper((string) $value),
+            'slug' => $this->createSlug((string) $value),
             default => $value,
         };
     }
+
+    /**
+     * Sanitiza múltiplos campos de uma vez.
+     *
+     * @param array $rules ['campo' => 'filtro']
+     * @return array
+     */
+    public function sanitizeMultiple(array $rules): array
+    {
+        $sanitized = [];
+        
+        foreach ($rules as $key => $filter) {
+            $sanitized[$key] = $this->sanitize($key, $filter);
+        }
+        
+        return $sanitized;
+    }
+
+    // ========== INFORMAÇÕES DE REFERÊNCIA ==========
 
     /**
      * Obtém o referer da requisição.
@@ -921,19 +1078,15 @@ class Request
     public function isBot(): bool
     {
         $userAgent = strtolower($this->userAgent() ?? '');
+        
+        if (empty($userAgent)) {
+            return false;
+        }
+
         $botSignatures = [
-            'bot',
-            'crawl',
-            'spider',
-            'slurp',
-            'yahoo',
-            'google',
-            'bing',
-            'facebook',
-            'twitter',
-            'whatsapp',
-            'telegram',
-            'baidu'
+            'googlebot', 'bingbot', 'slurp', 'duckduckbot', 'baiduspider',
+            'yandexbot', 'facebookexternalhit', 'twitterbot', 'linkedinbot',
+            'whatsapp', 'telegram', 'crawler', 'spider', 'bot', 'scraper'
         ];
 
         foreach ($botSignatures as $signature) {
@@ -952,36 +1105,24 @@ class Request
      */
     public function getDeviceInfo(): array
     {
-        $userAgent = $this->userAgent() ?? '';
-
-        $isMobile = preg_match('/Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i', $userAgent);
-        $isTablet = preg_match('/iPad|Android.*Tablet/i', $userAgent);
-        $isDesktop = !$isMobile && !$isTablet;
-
-        // Detecta o sistema operacional
-        $os = 'Unknown';
-        if (preg_match('/Windows NT/i', $userAgent)) $os = 'Windows';
-        elseif (preg_match('/Mac OS X/i', $userAgent)) $os = 'macOS';
-        elseif (preg_match('/Linux/i', $userAgent)) $os = 'Linux';
-        elseif (preg_match('/Android/i', $userAgent)) $os = 'Android';
-        elseif (preg_match('/iPhone|iPad|iPod/i', $userAgent)) $os = 'iOS';
-
-        // Detecta o navegador
-        $browser = 'Unknown';
-        if (preg_match('/Chrome/i', $userAgent)) $browser = 'Chrome';
-        elseif (preg_match('/Firefox/i', $userAgent)) $browser = 'Firefox';
-        elseif (preg_match('/Safari/i', $userAgent)) $browser = 'Safari';
-        elseif (preg_match('/Edge/i', $userAgent)) $browser = 'Edge';
-        elseif (preg_match('/Opera/i', $userAgent)) $browser = 'Opera';
-
-        return [
-            'is_mobile' => (bool) $isMobile,
-            'is_tablet' => (bool) $isTablet,
-            'is_desktop' => $isDesktop,
-            'os' => $os,
-            'browser' => $browser,
-            'user_agent' => $userAgent,
-        ];
+        if ($this->deviceInfo === null) {
+            $userAgent = $this->userAgent() ?? '';
+            
+            $isMobile = $this->detectMobile($userAgent);
+            $isTablet = $this->detectTablet($userAgent);
+            
+            $this->deviceInfo = [
+                'is_mobile' => $isMobile,
+                'is_tablet' => $isTablet,
+                'is_desktop' => !$isMobile && !$isTablet,
+                'is_bot' => $this->isBot(),
+                'os' => $this->detectOS($userAgent),
+                'browser' => $this->detectBrowser($userAgent),
+                'user_agent' => $userAgent,
+            ];
+        }
+        
+        return $this->deviceInfo;
     }
 
     /**
@@ -1014,6 +1155,8 @@ class Request
         return $this->getDeviceInfo()['is_desktop'];
     }
 
+    // ========== IDIOMAS ==========
+
     /**
      * Obtém as linguagens aceitas pelo cliente.
      *
@@ -1021,26 +1164,29 @@ class Request
      */
     public function getAcceptableLanguages(): array
     {
-        $languages = [];
-        $acceptLanguage = $this->getHeader('Accept-Language', '');
+        if ($this->acceptableLanguages === null) {
+            $this->acceptableLanguages = [];
+            $acceptLanguage = $this->getHeader('Accept-Language', '');
 
-        if (!$acceptLanguage) {
-            return $languages;
-        }
+            if ($acceptLanguage) {
+                $languages = [];
+                $parts = explode(',', $acceptLanguage);
 
-        $parts = explode(',', $acceptLanguage);
+                foreach ($parts as $part) {
+                    $part = trim($part);
+                    if (preg_match('/([a-z-]+)(?:;q=([0-9.]+))?/i', $part, $matches)) {
+                        $language = strtolower($matches[1]);
+                        $quality = isset($matches[2]) ? (float) $matches[2] : 1.0;
+                        $languages[$language] = $quality;
+                    }
+                }
 
-        foreach ($parts as $part) {
-            $part = trim($part);
-            if (preg_match('/([a-z-]+)(?:;q=([0-9.]+))?/i', $part, $matches)) {
-                $language = strtolower($matches[1]);
-                $quality = isset($matches[2]) ? (float) $matches[2] : 1.0;
-                $languages[$language] = $quality;
+                arsort($languages);
+                $this->acceptableLanguages = array_keys($languages);
             }
         }
-
-        arsort($languages);
-        return array_keys($languages);
+        
+        return $this->acceptableLanguages;
     }
 
     /**
@@ -1062,6 +1208,7 @@ class Request
                 return $language;
             }
 
+            // Verifica idioma base (ex: en de en-US)
             $baseLang = substr($language, 0, 2);
             if (in_array($baseLang, $available)) {
                 return $baseLang;
@@ -1070,6 +1217,44 @@ class Request
 
         return null;
     }
+
+    /**
+     * Define proxies confiáveis.
+     *
+     * @param array $proxies
+     * @return self
+     */
+    public function setTrustedProxies(array $proxies): self
+    {
+        $this->trustedProxies = $proxies;
+        return $this;
+    }
+
+    /**
+     * Define headers confiáveis de proxy.
+     *
+     * @param array $headers
+     * @return self
+     */
+    public function setTrustedHeaders(array $headers): self
+    {
+        $this->trustedHeaders = $headers;
+        return $this;
+    }
+
+    /**
+     * Define o tamanho máximo do corpo da requisição.
+     *
+     * @param int $size Tamanho em bytes
+     * @return self
+     */
+    public function setMaxInputSize(int $size): self
+    {
+        $this->maxInputSize = $size;
+        return $this;
+    }
+
+    // ========== MÉTODOS ESTÁTICOS DE CRIAÇÃO ==========
 
     /**
      * Cria uma nova instância de Request a partir dos dados globais atuais.
@@ -1089,37 +1274,46 @@ class Request
      * @param string $uri
      * @param array $data
      * @param array $headers
+     * @param array $server
      * @return self
      */
     public static function create(
         string $method = 'GET',
         string $uri = '/',
         array $data = [],
-        array $headers = []
+        array $headers = [],
+        array $server = []
     ): self {
-        $request = new self();
-
-        // Simula dados do servidor para teste
-        $request->server = array_merge($_SERVER, [
+        $serverData = array_merge($_SERVER, $server, [
             'REQUEST_METHOD' => strtoupper($method),
             'REQUEST_URI' => $uri,
             'PATH_INFO' => parse_url($uri, PHP_URL_PATH),
+            'QUERY_STRING' => parse_url($uri, PHP_URL_QUERY) ?? '',
         ]);
 
-        // Define headers
+        // Define headers customizados
         foreach ($headers as $name => $value) {
             $headerKey = 'HTTP_' . str_replace('-', '_', strtoupper($name));
-            $request->server[$headerKey] = $value;
+            $serverData[$headerKey] = $value;
         }
+
+        $queryParams = [];
+        $postData = [];
 
         // Define dados baseado no método
-        if (in_array(strtoupper($method), ['POST', 'PUT', 'PATCH'])) {
-            $request->parsedBody = $data;
+        if (in_array(strtoupper($method), ['POST', 'PUT', 'PATCH', 'DELETE'])) {
+            $postData = $data;
+            $_POST = $data; // Para compatibilidade
         } else {
-            $request->queryParams = $data;
+            $queryParams = $data;
         }
 
-        $request->parseHeaders();
+        $request = new self([], $serverData, $queryParams);
+
+        // Se há dados JSON, simula
+        if (isset($headers['Content-Type']) && str_contains($headers['Content-Type'], 'application/json')) {
+            $request->parsedBody = $data;
+        }
 
         return $request;
     }
@@ -1136,22 +1330,30 @@ class Request
             'uri' => $this->uri(),
             'full_uri' => $this->fullUri(),
             'url' => $this->url(),
+            'base_url' => $this->baseUrl(),
             'query_string' => $this->queryString(),
             'is_secure' => $this->isSecure(),
             'is_ajax' => $this->isAjax(),
             'is_json' => $this->isJson(),
+            'expects_json' => $this->expectsJson(),
             'ip' => $this->ip(),
             'user_agent' => $this->userAgent(),
             'host' => $this->getHost(),
+            'port' => $this->getPort(),
+            'scheme' => $this->getScheme(),
+            'referer' => $this->referer(),
             'params' => $this->params,
             'query_params' => $this->queryParams,
             'post_data' => $_POST,
-            'parsed_body' => $this->parsedBody,
+            'parsed_body' => $this->getParsedBody(),
+            'all_input' => $this->all(),
             'headers' => $this->headers,
             'cookies' => $_COOKIE,
-            'files' => $this->uploadedFiles,
+            'files' => array_keys($this->files()),
             'attributes' => $this->attributes,
             'device_info' => $this->getDeviceInfo(),
+            'acceptable_languages' => $this->getAcceptableLanguages(),
+            'preferred_language' => $this->getPreferredLanguage(),
         ];
     }
 
@@ -1162,6 +1364,407 @@ class Request
      */
     public function debug(): string
     {
-        return json_encode($this->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        return json_encode($this->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
+     * Converte a requisição para string (para logs).
+     *
+     * @return string
+     */
+    public function __toString(): string
+    {
+        return sprintf(
+            '%s %s [%s] - IP: %s - UA: %s',
+            $this->method(),
+            $this->uri(),
+            $this->isSecure() ? 'HTTPS' : 'HTTP',
+            $this->ip() ?? 'unknown',
+            substr($this->userAgent() ?? 'unknown', 0, 100)
+        );
+    }
+
+    // ========== MÉTODOS PRIVADOS/AUXILIARES ==========
+
+    /**
+     * Parse dos cabeçalhos HTTP.
+     *
+     * @return void
+     */
+    private function parseHeaders(): void
+    {
+        $this->headers = [];
+        
+        foreach ($this->server as $key => $value) {
+            if (str_starts_with($key, 'HTTP_')) {
+                $headerName = str_replace('_', '-', substr($key, 5));
+                $this->headers[$headerName] = $value;
+            }
+        }
+
+        // Adiciona cabeçalhos especiais que não começam com HTTP_
+        $specialHeaders = [
+            'CONTENT_TYPE' => 'CONTENT-TYPE',
+            'CONTENT_LENGTH' => 'CONTENT-LENGTH',
+            'CONTENT_MD5' => 'CONTENT-MD5',
+            'CONTENT_ENCODING' => 'CONTENT-ENCODING',
+        ];
+
+        foreach ($specialHeaders as $serverKey => $headerName) {
+            if (isset($this->server[$serverKey])) {
+                $this->headers[$headerName] = $this->server[$serverKey];
+            }
+        }
+    }
+
+    /**
+     * Parse do corpo da requisição baseado no Content-Type.
+     *
+     * @return void
+     */
+    private function parsedBody(): void
+    {
+        if ($this->parsedBody !== null) {
+            return;
+        }
+
+        $input = $this->getRawBody();
+
+        if (empty($input)) {
+            $this->parsedBody = [];
+            return;
+        }
+
+        $contentType = $this->getHeader('Content-Type', '');
+
+        try {
+            if (str_contains($contentType, 'application/json')) {
+                $decoded = json_decode($input, true, 512, JSON_THROW_ON_ERROR);
+                $this->parsedBody = is_array($decoded) ? $decoded : [];
+            } elseif (str_contains($contentType, 'application/x-www-form-urlencoded')) {
+                parse_str($input, $this->parsedBody);
+                $this->parsedBody = $this->parsedBody ?? [];
+            } elseif (str_contains($contentType, 'application/xml') || str_contains($contentType, 'text/xml')) {
+                $this->parseXmlBody($input);
+            } elseif (str_contains($contentType, 'multipart/form-data')) {
+                // Para multipart, os dados já estão em $_POST
+                $this->parsedBody = $_POST;
+            } else {
+                // Para outros tipos, armazena o conteúdo bruto
+                $this->parsedBody = ['_raw' => $input];
+            }
+        } catch (\JsonException $e) {
+            throw new InvalidArgumentException('JSON inválido: ' . $e->getMessage());
+        } catch (\Exception $e) {
+            throw new InvalidArgumentException('Erro ao processar corpo da requisição: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Parse do corpo XML.
+     *
+     * @param string $input
+     * @return void
+     */
+    private function parseXmlBody(string $input): void
+    {
+        if (empty($input)) {
+            $this->parsedBody = [];
+            return;
+        }
+
+        libxml_use_internal_errors(true);
+        $xml = simplexml_load_string($input, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NOERROR);
+
+        if ($xml !== false) {
+            $this->parsedBody = json_decode(json_encode($xml), true) ?? [];
+        } else {
+            $errors = libxml_get_errors();
+            $errorMessage = 'XML inválido';
+            if (!empty($errors)) {
+                $errorMessage .= ': ' . $errors[0]->message;
+            }
+            libxml_clear_errors();
+            throw new InvalidArgumentException($errorMessage);
+        }
+    }
+
+    /**
+     * Normaliza nome de cabeçalho.
+     *
+     * @param string $name
+     * @return string
+     */
+    private function normalizeHeaderName(string $name): string
+    {
+        return str_replace('_', '-', strtoupper($name));
+    }
+
+    /**
+     * Valida requisição básica.
+     *
+     * @return void
+     * @throws InvalidArgumentException
+     */
+    private function validateRequest(): void
+    {
+        // Valida método HTTP
+        $method = $this->method();
+        $allowedMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+        
+        if (!in_array($method, $allowedMethods)) {
+            throw new InvalidArgumentException("Método HTTP inválido: {$method}");
+        }
+
+        // Valida Content-Length se presente
+        $contentLength = $this->getHeader('Content-Length');
+        if ($contentLength !== null && !is_numeric($contentLength)) {
+            throw new InvalidArgumentException('Content-Length inválido');
+        }
+
+        // Valida tamanho máximo do corpo se configurado
+        if ($contentLength && (int) $contentLength > $this->maxInputSize) {
+            throw new InvalidArgumentException('Corpo da requisição muito grande');
+        }
+    }
+
+    /**
+     * Verifica se um IP é válido.
+     *
+     * @param string $ip
+     * @return bool
+     */
+    private function isValidIp(string $ip): bool
+    {
+        return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+    }
+
+    /**
+     * Obtém IP de headers de proxy.
+     *
+     * @return string|null
+     */
+    private function getForwardedIp(): ?string
+    {
+        $remoteAddr = $this->server['REMOTE_ADDR'] ?? '';
+        
+        if (!$this->isTrustedProxy($remoteAddr)) {
+            return null;
+        }
+
+        foreach ($this->trustedHeaders as $header) {
+            $headerValue = $this->getHeader($header);
+            if ($headerValue) {
+                $ips = explode(',', $headerValue);
+                $cleanIp = trim($ips[0]);
+                
+                if ($this->isValidIp($cleanIp)) {
+                    return $cleanIp;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Verifica se o IP é de um proxy confiável.
+     *
+     * @param string $ip
+     * @return bool
+     */
+    private function isTrustedProxy(string $ip): bool
+    {
+        if (empty($this->trustedProxies)) {
+            return false;
+        }
+
+        foreach ($this->trustedProxies as $proxy) {
+            if ($ip === $proxy || $this->ipInRange($ip, $proxy)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Verifica se um IP está dentro de um range CIDR.
+     *
+     * @param string $ip
+     * @param string $range
+     * @return bool
+     */
+    private function ipInRange(string $ip, string $range): bool
+    {
+        if (!str_contains($range, '/')) {
+            return $ip === $range;
+        }
+
+        list($subnet, $mask) = explode('/', $range);
+        
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return $this->ipv4InRange($ip, $subnet, (int) $mask);
+        } elseif (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            return $this->ipv6InRange($ip, $subnet, (int) $mask);
+        }
+
+        return false;
+    }
+
+    /**
+     * Verifica se um IPv4 está no range.
+     *
+     * @param string $ip
+     * @param string $subnet
+     * @param int $mask
+     * @return bool
+     */
+    private function ipv4InRange(string $ip, string $subnet, int $mask): bool
+    {
+        $ipLong = ip2long($ip);
+        $subnetLong = ip2long($subnet);
+        $maskLong = -1 << (32 - $mask);
+
+        return ($ipLong & $maskLong) === ($subnetLong & $maskLong);
+    }
+
+    /**
+     * Verifica se um IPv6 está no range.
+     *
+     * @param string $ip
+     * @param string $subnet
+     * @param int $mask
+     * @return bool
+     */
+    private function ipv6InRange(string $ip, string $subnet, int $mask): bool
+    {
+        $ipBin = inet_pton($ip);
+        $subnetBin = inet_pton($subnet);
+        
+        if ($ipBin === false || $subnetBin === false) {
+            return false;
+        }
+
+        $bytes = $mask >> 3;
+        $bits = $mask & 7;
+
+        return substr($ipBin, 0, $bytes) === substr($subnetBin, 0, $bytes) &&
+               (($bits === 0) || (ord($ipBin[$bytes]) >> (8 - $bits)) === (ord($subnetBin[$bytes]) >> (8 - $bits)));
+    }
+
+    /**
+     * Detecta se é dispositivo móvel.
+     *
+     * @param string $userAgent
+     * @return bool
+     */
+    private function detectMobile(string $userAgent): bool
+    {
+        $mobilePatterns = [
+            'Mobile', 'Android', 'iPhone', 'iPod', 'BlackBerry', 
+            'IEMobile', 'Opera Mini', 'webOS', 'Windows Phone'
+        ];
+
+        foreach ($mobilePatterns as $pattern) {
+            if (stripos($userAgent, $pattern) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Detecta se é tablet.
+     *
+     * @param string $userAgent
+     * @return bool
+     */
+    private function detectTablet(string $userAgent): bool
+    {
+        $tabletPatterns = ['iPad', 'Android.*Tablet', 'Kindle', 'Silk/', 'PlayBook'];
+
+        foreach ($tabletPatterns as $pattern) {
+            if (preg_match("/{$pattern}/i", $userAgent)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Detecta o sistema operacional.
+     *
+     * @param string $userAgent
+     * @return string
+     */
+    private function detectOS(string $userAgent): string
+    {
+        $osPatterns = [
+            'Windows NT 10.0' => 'Windows 10',
+            'Windows NT 6.3' => 'Windows 8.1',
+            'Windows NT 6.2' => 'Windows 8',
+            'Windows NT 6.1' => 'Windows 7',
+            'Windows NT' => 'Windows',
+            'Mac OS X' => 'macOS',
+            'iPhone OS' => 'iOS',
+            'iPad.*OS' => 'iPadOS',
+            'Android' => 'Android',
+            'Linux' => 'Linux',
+            'Ubuntu' => 'Ubuntu',
+            'CrOS' => 'Chrome OS',
+        ];
+
+        foreach ($osPatterns as $pattern => $os) {
+            if (preg_match("/{$pattern}/i", $userAgent)) {
+                return $os;
+            }
+        }
+
+        return 'Unknown';
+    }
+
+    /**
+     * Detecta o navegador.
+     *
+     * @param string $userAgent
+     * @return string
+     */
+    private function detectBrowser(string $userAgent): string
+    {
+        $browserPatterns = [
+            'Edg/' => 'Edge',
+            'Chrome/' => 'Chrome',
+            'Firefox/' => 'Firefox',
+            'Safari/' => 'Safari',
+            'Opera/' => 'Opera',
+            'OPR/' => 'Opera',
+            'Trident/' => 'Internet Explorer',
+        ];
+
+        foreach ($browserPatterns as $pattern => $browser) {
+            if (stripos($userAgent, $pattern) !== false) {
+                return $browser;
+            }
+        }
+
+        return 'Unknown';
+    }
+
+    /**
+     * Cria um slug a partir de uma string.
+     *
+     * @param string $text
+     * @return string
+     */
+    private function createSlug(string $text): string
+    {
+        $text = trim($text);
+        $text = iconv('UTF-8', 'ASCII//TRANSLIT', $text);
+        $text = preg_replace('/[^a-zA-Z0-9\-_]/', '-', $text);
+        $text = preg_replace('/\-+/', '-', $text);
+        return trim(strtolower($text), '-');
     }
 }

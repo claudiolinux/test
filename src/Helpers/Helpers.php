@@ -6,8 +6,6 @@ use Slenix\Http\Message\Response;
 use Slenix\Libraries\Template;
 use Slenix\Http\Message\Router;
 use Slenix\Libraries\Session;
-use Carbon\Carbon; // Adicionamos a biblioteca Carbon para manipulação de datas
-
 /* 
 |--------------------------------------------|
 |****** HELPERS GERAIS E CONSTANTES v1 ******|

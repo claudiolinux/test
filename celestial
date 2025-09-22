@@ -22,7 +22,7 @@ use Slenix\Commands\Command;
 use Slenix\Commands\MakeCommand;
 use Slenix\Commands\ServeCommand;
 
-final class SlenixCli
+final class Celestial
 {
     private array $args;
 
@@ -47,16 +47,18 @@ final class SlenixCli
                     (new MakeCommand($this->args))->makeModel();
                     break;
                 case 'make:controller':
-                    (new MakeCommand($this->args))->makeController();
+                    // Verifica se tem a flag --resource
+                    if (in_array('--resource', $this->args)) {
+                        (new MakeCommand($this->args))->makeControllerResource();
+                    } else {
+                        (new MakeCommand($this->args))->makeController();
+                    }
                     break;
                 case 'make:middleware':
                     (new MakeCommand($this->args))->makeMiddleware();
                     break;
                 case 'route:list':
                     $this->listRoutes();
-                    break;
-                case 'route:clear':
-                    $this->clearRouteCache();
                     break;
                 case 'serve':
                     (new ServeCommand($this->args))->execute();
@@ -88,7 +90,7 @@ final class SlenixCli
     private function listRoutes(): void
     {
         Command::info('Carregando rotas...');
-        
+
         // Incluir arquivo de rotas se existir
         $routesFile = __DIR__ . '/routes/web.php';
         if (file_exists($routesFile)) {
@@ -112,20 +114,22 @@ final class SlenixCli
             $handler = $this->formatHandler($route['handler']);
             $name = $route['name'] ?? '';
             $middlewares = !empty($route['middleware']) ? ' [' . implode(', ', $route['middleware']) . ']' : '';
-            
-            printf("%-8s %-30s %-25s %-15s%s", 
-                $route['method'], 
-                $route['pathUri'], 
-                $handler, 
+
+            printf(
+                "%-8s %-30s %-25s %-15s%s",
+                $route['method'],
+                $route['pathUri'],
+                $handler,
                 $name,
                 PHP_EOL
             );
 
             if ($middlewares) {
-                printf("%-8s %-30s %-25s %-15s%s", 
-                    '', 
-                    '', 
-                    $middlewares, 
+                printf(
+                    "%-8s %-30s %-25s %-15s%s",
+                    '',
+                    '',
+                    $middlewares,
                     '',
                     PHP_EOL
                 );
@@ -134,21 +138,6 @@ final class SlenixCli
 
         echo str_repeat('-', 80) . PHP_EOL;
         Command::success('Total: ' . count($routes) . ' rotas');
-    }
-
-    /**
-     * Limpa cache de rotas (se implementado).
-     */
-    private function clearRouteCache(): void
-    {
-        $cacheFile = __DIR__ . '/storage/cache/routes.php';
-        
-        if (file_exists($cacheFile)) {
-            unlink($cacheFile);
-            Command::success('Cache de rotas limpo com sucesso!');
-        } else {
-            Command::info('Cache de rotas não encontrado.');
-        }
     }
 
     /**
@@ -169,7 +158,7 @@ final class SlenixCli
 }
 
 try {
-    new SlenixCli($argv);
+    new Celestial($argv);
 } catch (Throwable $e) {
     Command::error("Erro fatal: {$e->getMessage()}");
     exit(1);

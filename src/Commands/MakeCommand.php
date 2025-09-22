@@ -47,15 +47,27 @@ EOT;
         $this->createFile($filePath, $template, $modelName, 'Model');
     }
 
+
     public function makeController(): void
     {
         if (count($this->args) < 3) {
             self::error('Nome do controller é obrigatório.');
             self::info('Exemplo: php celestial make:controller Home');
+            self::info('Para resource controller: php celestial make:controller Home --resource');
             exit(1);
         }
 
-        $controllerName = ucfirst($this->args[2]);
+        // Verifica se tem a flag --resource
+        $isResource = in_array('--resource', $this->args);
+
+        // Se tem --resource, usa o método específico
+        if ($isResource) {
+            $this->makeControllerResource();
+            return;
+        }
+
+        // Remove a posição do --resource se existir para pegar o nome corretamente
+        $controllerName = ucfirst($this->getControllerName());
         $filePath = __DIR__ . '/../../app/Controllers/' . $controllerName . '.php';
 
         $this->ensureFileDoesNotExist($filePath, $controllerName, 'Controller');
@@ -80,6 +92,105 @@ class {$controllerName}
 EOT;
 
         $this->createFile($filePath, $template, $controllerName, 'Controller');
+    }
+
+    public function makeControllerResource(): void
+    {
+        $controllerName = ucfirst($this->getControllerName());
+        $filePath = __DIR__ . '/../../app/Controllers/' . $controllerName . '.php';
+
+        $this->ensureFileDoesNotExist($filePath, $controllerName, 'Controller');
+
+        $template = <<<EOT
+<?php
+
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use Slenix\Http\Message\Request;
+use Slenix\Http\Message\Response;
+
+class {$controllerName}
+{
+
+    /**
+     * Display a listing of the resource.
+     */
+    public function index(Request \$request, Response \$response)
+    {
+        //
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     */
+    public function create(Request \$request, Response \$response)
+    {
+        //
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(Request \$request, Response \$response)
+    {
+        //
+    }
+
+    /**
+     * Display the specified resource.
+     */
+    public function show(Request \$request, Response \$response, array \$params)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     */
+    public function edit(Request \$request, Response \$response, array \$params)
+    {
+        //
+    }
+
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update(Request \$request, Response \$response, array \$params)
+    {
+        //
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(Request \$request, Response \$response, array \$params)
+    {
+        //
+    }
+}
+EOT;
+
+        $this->createFile($filePath, $template, $controllerName, 'Controller');
+    }
+
+    /**
+     * Obtém o nome do controller dos argumentos, ignorando flags
+     */
+    private function getControllerName(): string
+    {
+        // Procura por argumentos que não sejam flags (não começam com --)
+        for ($i = 2; $i < count($this->args); $i++) {
+            if (!str_starts_with($this->args[$i], '--')) {
+                return $this->args[$i];
+            }
+        }
+
+        self::error('Nome do controller é obrigatório.');
+        self::info('Exemplo: php celestial make:controller Home');
+        self::info('Para resource controller: php celestial make:controller Home --resource');
+        exit(1);
     }
 
     private function ensureFileDoesNotExist(string $path, string $name, string $type): void
