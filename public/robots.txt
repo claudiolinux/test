@@ -1,0 +1,7 @@
+# Slenix Framework - robots.txt
+User-agent: *
+Disallow: /src/
+Disallow: /vendor/
+Disallow: /celestial/
+Disallow: /app/
+Allow: /
