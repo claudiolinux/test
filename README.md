@@ -426,60 +426,73 @@ foreach ($users as $user) {
 
 ## 📤 Upload de Arquivos
 
-A classe `Upload` oferece uma maneira robusta e segura de gerenciar uploads de arquivos com validações de tamanho e tipo MIME.
+A classe `Upload` gerencia uploads com validações robustas, integrada à classe `Request` para facilitar o uso.
+
 
 ### Exemplo de Uso
 ```php
-use Slenix\Http\Message\Upload;
+use Slenix\Http\Message\Request;
+use Slenix\Http\Message\Response;
+
+Router::get('/upload', fn(Request $request, Response $response) => 
+    view('upload', []));
 
 Router::post('/upload', function(Request $request, Response $response) {
     try {
-        $file = $request->file('image');
-        $allowedMimeTypes = ['image/jpeg', 'image/png'];
-        $maxSize = 2 * 1024 * 1024; // 2MB
+        if (!$request->hasFile('arquivo')) {
+            return view('upload', ['error' => 'Nenhum arquivo enviado.']);
+        }
 
-        $upload = new Upload($file, $allowedMimeTypes, $maxSize);
-        
-        // Informações do arquivo
-        $name = $upload->getOriginalName();
-        $extension = $upload->getOriginalExtension();
-        $size = $upload->getSize();
-        $mimeType = $upload->getMimeType();
-        
-        // Mover arquivo para o diretório
-        $destination = $upload->move('uploads');
-        
-        return $response->json([
-            'message' => 'Upload realizado com sucesso!',
-            'file' => [
-                'name' => $name,
-                'extension' => $extension,
-                'size' => $size,
-                'mime_type' => $mimeType,
-                'path' => $destination
-            ]
+        $upload = $request->file('arquivo');
+        $upload->setAllowedMimeTypes(['image/jpeg', 'image/png', 'image/gif'])
+               ->setMaxSize(5 * 1024 * 1024) // 5MB
+               ->setAllowedExtensions(['jpg', 'jpeg', 'png', 'gif']);
+
+        if (!$upload->isValid()) {
+            return view('upload', ['error' => implode('; ', $upload->getErrors())]);
+        }
+
+        $uploadDir = storage_path('uploads');
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+        $path = $upload->store($uploadDir, true);
+
+        return view('upload-result', [
+            'sucesso' => true,
+            'nome_arquivo' => $upload->getOriginalName(),
+            'tamanho' => $upload->getHumanSize(),
+            'tipo' => $upload->getMimeType(),
+            'caminho' => basename($path),
+            'e_imagem' => $upload->isImage()
         ]);
-    } catch (\Exception $e) {
-        return $response->json([
-            'message' => 'Erro ao fazer upload: ' . $e->getMessage()
-        ], 400);
+    } catch (\RuntimeException $e) {
+        return view('upload', ['error' => $e->getMessage()]);
     }
 })->middleware('csrf');
 ```
 
 ### Propriedades e Métodos
 - **Propriedades**:
-  - `$file`: Armazena os dados do arquivo (`$_FILES`).
-  - `$maxSize`: Tamanho máximo permitido (padrão: 10MB).
-  - `$allowedMimeTypes`: Tipos MIME permitidos.
+ - `$file`: Dados do arquivo (de $_FILES).
+ - `$allowedMimeTypes`: Tipos MIME permitidos.
+ - `$allowedExtensions`: Extensões permitidas.
+ - `$maxSize`: Tamanho máximo (bytes).
+ - `$errors`: Lista de erros de validação.
 - **Métodos**:
-  - `getOriginalName()`: Retorna o nome original do arquivo.
-  - `getOriginalExtension()`: Retorna a extensão do arquivo.
-  - `getRealPath()`: Retorna o caminho temporário.
-  - `getSize()`: Retorna o tamanho em bytes.
-  - `getMimeType()`: Retorna o tipo MIME.
-  - `move($directory, $name = null)`: Move o arquivo para o diretório especificado.
-  - `validate()`: Valida tamanho e tipo MIME.
+ - `setAllowedMimeTypes(array $types)`: Define tipos MIME permitidos.
+ - `setAllowedExtensions(array $exts)`: Define extensões permitidas.
+ - `setMaxSize(int $size)`: Define tamanho máximo.
+ - `isValid()`: bool: Verifica se o arquivo é válido.
+ - `getErrors()`: array: Retorna erros de validação.
+ - `getOriginalName()`: string: Nome original do arquivo.
+ - `getOriginalExtension()`: string: Extensão do arquivo.
+ - `getMimeType()`: string: Tipo MIME.
+ - `getSize()`: int: Tamanho em bytes.
+ - `getHumanSize()`: string: Tamanho formatado (ex: "2.5 MB").
+ - `isImage()`: bool: Verifica se é uma imagem.
+ - `store(string $directory, bool $unique = false)`: string: Salva o arquivo.
+
 
 ## 🌐 Requisições HTTP com HttpClient
 

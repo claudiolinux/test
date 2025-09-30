@@ -9,16 +9,6 @@
 | parâmetros da rota, método HTTP, URI, dados de entrada (POST, GET),
 | arquivos, cookies, cabeçalhos, IP do cliente e user agent.
 |
-| Melhorias implementadas:
-| - Lazy loading para melhor performance
-| - Validação robusta de dados
-| - Melhor tratamento de erros
-| - Suporte a múltiplos Content-Types
-| - Cache interno para operações custosas
-| - Métodos utilitários adicionais
-| - Correção para evitar erro de chave indefinida em uploads de arquivos
-| - Garantia de que normalizeHeaderName() está presente e reconhecido
-|
 */
 
 declare(strict_types=1);
@@ -26,7 +16,6 @@ declare(strict_types=1);
 namespace Slenix\Http\Message;
 
 use InvalidArgumentException;
-use Slenix\Exceptions\UploadException;
 use Slenix\Http\Message\Upload;
 
 /**
@@ -79,7 +68,6 @@ class Request
         $this->queryParams = $query ?: ($_GET ?? []);
         
         $this->parseHeaders();
-        $this->validateRequest();
     }
 
     /**
@@ -128,8 +116,6 @@ class Request
         $this->params = array_merge($this->params, $params);
         return $this;
     }
-
-    // ========== MÉTODOS HTTP E URI ==========
 
     /**
      * Retorna o método HTTP da requisição.
@@ -462,26 +448,16 @@ class Request
      *
      * @param string $key A chave do arquivo no array $_FILES.
      * @return Upload
-     * @throws UploadException Se ocorrer um erro no upload do PHP ou se o array estiver incompleto.
      */
     public function file(string $key): Upload
     {
-        if (!$this->hasFile($key)) {
-            throw new UploadException(UPLOAD_ERR_NO_FILE);
+        $fileData = $_FILES[$key] ?? [];
+        if (is_array($fileData['name']) && isset($fileData['name'][0])) {
+            // Para múltiplos arquivos, retorna o primeiro
+            $normalizedFiles = $this->normalizeNestedFiles($fileData);
+            $fileData = $normalizedFiles[0] ?? [];
         }
-
-        // Verifica se é um arquivo único (não array)
-        if (!is_array($_FILES[$key]['name'])) {
-            return new Upload($_FILES[$key]);
-        }
-
-        // Para múltiplos arquivos, retorna o primeiro arquivo válido
-        $normalizedFiles = $this->normalizeNestedFiles($_FILES[$key]);
-        if (empty($normalizedFiles)) {
-            throw new UploadException(UPLOAD_ERR_NO_FILE);
-        }
-
-        return new Upload($normalizedFiles[0]);
+        return new Upload($fileData);
     }
 
     /**
@@ -492,36 +468,7 @@ class Request
     public function files(): array
     {
         if ($this->uploadedFiles === null) {
-            $this->uploadedFiles = [];
-
-            foreach ($_FILES as $key => $fileData) {
-                // Usa hasFile() para validar a entrada
-                if (!$this->hasFile($key)) {
-                    error_log("Erro no upload: Arquivo inválido ou ausente para a chave '{$key}'.");
-                    continue;
-                }
-
-                try {
-                    if (is_array($fileData['name'])) {
-                        // Lida com múltiplos arquivos
-                        $normalizedFiles = $this->normalizeNestedFiles($fileData);
-                        foreach ($normalizedFiles as $index => $normalizedFile) {
-                            if ($normalizedFile['error'] !== UPLOAD_ERR_NO_FILE && 
-                                !empty($normalizedFile['tmp_name'])) {
-                                $this->uploadedFiles["{$key}_{$index}"] = new Upload($normalizedFile);
-                            }
-                        }
-                    } else {
-                        // Arquivo único
-                        if ($fileData['error'] !== UPLOAD_ERR_NO_FILE && 
-                            !empty($fileData['tmp_name'])) {
-                            $this->uploadedFiles[$key] = new Upload($fileData);
-                        }
-                    }
-                } catch (UploadException $e) {
-                    error_log("Erro no upload do arquivo {$key}: " . $e->getMessage());
-                }
-            }
+            $this->uploadedFiles = Upload::createMultiple($_FILES);
         }
 
         return $this->uploadedFiles;
@@ -536,37 +483,15 @@ class Request
     private function normalizeNestedFiles(array $fileData): array
     {
         $normalized = [];
-        $count = is_array($fileData['name']) ? count($fileData['name']) : 1;
+        $keys = ['name', 'type', 'tmp_name', 'error', 'size'];
+        $count = count($fileData['name'] ?? []);
 
-        if (!is_array($fileData['name'])) {
-            // Arquivo único
-            if (isset($fileData['name'], $fileData['tmp_name'], $fileData['size'], $fileData['error'])) {
-                $normalized[] = [
-                    'name' => $fileData['name'],
-                    'type' => $fileData['type'] ?? '',
-                    'tmp_name' => $fileData['tmp_name'],
-                    'error' => $fileData['error'],
-                    'size' => $fileData['size']
-                ];
-            }
-            return $normalized;
-        }
-
-        // Múltiplos arquivos
         for ($i = 0; $i < $count; $i++) {
-            if (!isset($fileData['name'][$i], $fileData['tmp_name'][$i], 
-                      $fileData['size'][$i], $fileData['error'][$i])) {
-                error_log("Erro no upload: Array de arquivo aninhado incompleto no índice {$i} para a chave.");
-                continue;
+            $singleFile = [];
+            foreach ($keys as $key) {
+                $singleFile[$key] = $fileData[$key][$i] ?? ($fileData[$key] ?? null);
             }
-
-            $normalized[$i] = [
-                'name' => $fileData['name'][$i],
-                'type' => $fileData['type'][$i] ?? '',
-                'tmp_name' => $fileData['tmp_name'][$i],
-                'error' => $fileData['error'][$i],
-                'size' => $fileData['size'][$i]
-            ];
+            $normalized[] = $singleFile;
         }
 
         return $normalized;
