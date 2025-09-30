@@ -253,6 +253,24 @@ if (!function_exists('old')) {
     }
 }
 
+if (!function_exists('dd')) {
+    /**
+     * Dump de variáveis e finaliza a execução.
+     *
+     * @param mixed ...$vars Variáveis para exibir.
+     * @return never
+     */
+    function dd(...$vars)
+    {
+        echo '<pre>';
+        foreach ($vars as $var) {
+            var_dump($var);
+        }
+        echo '</pre>';
+        exit;
+    }
+}
+
 Template::share('route', function (string $name, array $params = []): ?string {
     return Router::route($name, $params);
 });

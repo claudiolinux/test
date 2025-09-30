@@ -8,24 +8,13 @@
 | acessar informações do arquivo e movê-lo para um diretório de destino,
 | com validações avançadas, tratamento de erros e recursos de segurança.
 |
-| Melhorias implementadas:
-| - Validação robusta de dados de entrada
-| - Detecção de tipos MIME seguros
-| - Proteção contra ataques de upload
-| - Validação de extensões duplas
-| - Suporte a múltiplos tipos de storage
-| - Cache de informações custosas
-| - Logs detalhados de segurança
-|
 */
 
 declare(strict_types=1);
 
 namespace Slenix\Http\Message;
 
-use InvalidArgumentException;
 use RuntimeException;
-use Slenix\Exceptions\UploadException;
 
 class Upload
 {
@@ -37,7 +26,7 @@ class Upload
     protected int $error;
     protected ?string $clientMimeType;
 
-    // Configurações de validação
+    // Configurações de validação (opcionais)
     protected int $maxSize = 10485760; // 10MB por padrão
     protected array $allowedMimeTypes = [];
     protected array $allowedExtensions = [];
@@ -53,6 +42,9 @@ class Upload
     private ?array $imageInfo = null;
     private ?bool $isValid = null;
 
+    // Erros de validação
+    protected array $validationErrors = [];
+
     // Configurações de segurança
     protected bool $strictMimeValidation = true;
     protected bool $allowExecutableFiles = false;
@@ -67,45 +59,55 @@ class Upload
      * Construtor da classe Upload.
      *
      * @param array $file Dados do arquivo do $_FILES
-     * @param array $options Opções de configuração
-     * @throws UploadException Se houver erro nos dados do arquivo
-     * @throws InvalidArgumentException Se os dados forem inválidos
+     * @param array $options Opções de configuração opcionais
      */
     public function __construct(array $file, array $options = [])
     {
-        $this->validateFileArray($file);
         $this->initializeFileData($file);
         $this->applyOptions($options);
-        $this->validateUploadError();
-        $this->performSecurityChecks();
+        // Verificações básicas de segurança no construtor para robustez mínima
+        $this->performBasicSecurityChecks();
     }
 
     /**
      * Valida o arquivo contra todas as regras configuradas.
+     * O programador deve chamar este método explicitamente se desejar validação.
      *
+     * @param bool $throwOnError Se deve lançar exceção em caso de erro (default: true)
      * @return bool
-     * @throws RuntimeException Se a validação falhar
+     * @throws RuntimeException Se validação falhar e $throwOnError for true
      */
-    public function validate(): bool
+    public function validate(bool $throwOnError = true): bool
     {
         if ($this->isValid !== null) {
             return $this->isValid;
         }
 
-        try {
-            $this->validateSize();
-            $this->validateMimeType();
-            $this->validateExtension();
-            $this->validateFilename();
-            $this->validateFileContent();
-            
-            $this->isValid = true;
-            return true;
-            
-        } catch (RuntimeException $e) {
-            $this->isValid = false;
-            throw $e;
+        $this->validationErrors = []; // Limpa erros anteriores
+
+        $validations = [
+            [$this, 'validateSize'],
+            [$this, 'validateMimeType'],
+            [$this, 'validateExtension'],
+            [$this, 'validateFilename'],
+            [$this, 'validateFileContent'],
+            [$this, 'performSecurityChecks'],
+        ];
+
+        foreach ($validations as $validation) {
+            try {
+                call_user_func($validation);
+            } catch (RuntimeException $e) {
+                $this->validationErrors[] = $e->getMessage();
+                if ($throwOnError) {
+                    $this->isValid = false;
+                    throw $e;
+                }
+            }
         }
+
+        $this->isValid = empty($this->validationErrors);
+        return $this->isValid;
     }
 
     /**
@@ -115,15 +117,34 @@ class Upload
      */
     public function isValid(): bool
     {
-        try {
-            return $this->validate();
-        } catch (RuntimeException $e) {
-            return false;
-        }
+        return $this->validate(false);
+    }
+
+    /**
+     * Retorna os erros de validação da última tentativa.
+     *
+     * @return array<string>
+     */
+    public function getErrors(): array
+    {
+        return $this->validationErrors;
+    }
+
+    /**
+     * Limpa os erros de validação acumulados.
+     *
+     * @return self
+     */
+    public function clearErrors(): self
+    {
+        $this->validationErrors = [];
+        $this->isValid = null; // Reset para nova validação
+        return $this;
     }
 
     /**
      * Move o arquivo para o destino especificado.
+     * Recomenda-se chamar validate() antes para robustez.
      *
      * @param string $directory Diretório de destino
      * @param string|null $filename Nome do arquivo (opcional)
@@ -133,7 +154,7 @@ class Upload
      */
     public function move(string $directory, ?string $filename = null, bool $preserveOriginalName = false): string
     {
-        $this->validate();
+        $this->validate(); // Validação obrigatória para move() por segurança
 
         if (!$this->createDirectoryIfNotExists($directory)) {
             throw new RuntimeException("Não foi possível criar o diretório: {$directory}");
@@ -162,6 +183,7 @@ class Upload
 
     /**
      * Salva o arquivo com um nome único gerado automaticamente.
+     * Recomenda-se chamar validate() antes para robustez.
      *
      * @param string $directory Diretório de destino
      * @param bool $useTimestamp Se deve incluir timestamp no nome
@@ -169,9 +191,11 @@ class Upload
      */
     public function store(string $directory, bool $useTimestamp = true): string
     {
+        $this->validate(); // Validação obrigatória para store() por segurança
+
         $extension = $this->getExtension();
         $prefix = $useTimestamp ? date('Y-m-d_His_') : '';
-        $uniqueName = $prefix . bin2hex(random_bytes(8)) . '.' . $extension;
+        $uniqueName = $prefix . bin2hex(random_bytes(8)) . ($extension ? '.' . $extension : '');
         
         return $this->move($directory, $uniqueName);
     }
@@ -197,16 +221,16 @@ class Upload
     }
 
     /**
-     * Retorna a extensão do arquivo (validada e em minúsculas).
+     * Retorna a extensão do arquivo (em minúsculas).
      *
      * @return string
      */
     public function getExtension(): string
     {
         if ($this->extension === null) {
-            $extension = strtolower(pathinfo($this->originalName, PATHINFO_EXTENSION));
+            $extension = strtolower(pathinfo($this->originalName, PATHINFO_EXTENSION)) ?: '';
             
-            // Valida extensão baseada no MIME type real se configurado
+            // Valida extensão baseada no MIME type real se configurado (cache)
             if ($this->strictMimeValidation) {
                 $mimeExtension = $this->getExtensionFromMimeType($this->getMimeType());
                 if ($mimeExtension && $extension !== $mimeExtension) {
@@ -278,22 +302,20 @@ class Upload
     {
         if ($this->realMimeType === null) {
             if (!file_exists($this->tempPath)) {
-                throw new RuntimeException('Arquivo temporário não encontrado');
+                $this->realMimeType = 'application/octet-stream'; // Fallback robusto
+                return $this->realMimeType;
             }
 
             $finfo = finfo_open(FILEINFO_MIME_TYPE);
             if ($finfo === false) {
-                throw new RuntimeException('Não foi possível inicializar a detecção de MIME type');
+                $this->realMimeType = 'application/octet-stream'; // Fallback
+                return $this->realMimeType;
             }
 
             $mimeType = finfo_file($finfo, $this->tempPath);
             finfo_close($finfo);
 
-            if ($mimeType === false) {
-                throw new RuntimeException('Não foi possível detectar o tipo MIME do arquivo');
-            }
-
-            $this->realMimeType = $mimeType;
+            $this->realMimeType = $mimeType ?: 'application/octet-stream';
         }
 
         return $this->realMimeType;
@@ -351,7 +373,7 @@ class Upload
      */
     public function getHash(): string
     {
-        return hash_file('sha256', $this->tempPath);
+        return hash_file('sha256', $this->tempPath) ?: '';
     }
 
     /**
@@ -362,11 +384,11 @@ class Upload
     public function isImage(): bool
     {
         $imageMimes = [
-            'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 
+            'image/jpeg', 'image/png', 'image/gif', 
             'image/webp', 'image/bmp', 'image/svg+xml'
         ];
         
-        return in_array($this->getMimeType(), $imageMimes);
+        return in_array($this->getMimeType(), $imageMimes, true);
     }
 
     /**
@@ -384,7 +406,7 @@ class Upload
             'text/plain', 'text/csv'
         ];
         
-        return in_array($this->getMimeType(), $documentMimes);
+        return in_array($this->getMimeType(), $documentMimes, true);
     }
 
     /**
@@ -415,10 +437,8 @@ class Upload
     public function isExecutable(): bool
     {
         $extension = $this->getExtension();
-        return in_array($extension, $this->forbiddenExtensions);
+        return in_array($extension, $this->forbiddenExtensions, true);
     }
-
-    // ========== CONFIGURAÇÃO ==========
 
     /**
      * Define o tamanho máximo permitido.
@@ -510,57 +530,32 @@ class Upload
         foreach ($files as $key => $file) {
             if (is_array($file['name'])) {
                 // Múltiplos arquivos no mesmo campo
-                for ($i = 0; $i < count($file['name']); $i++) {
+                $count = count($file['name']);
+                for ($i = 0; $i < $count; $i++) {
                     $singleFile = [
-                        'name' => $file['name'][$i],
+                        'name' => $file['name'][$i] ?? '',
                         'type' => $file['type'][$i] ?? '',
-                        'tmp_name' => $file['tmp_name'][$i],
-                        'error' => $file['error'][$i],
-                        'size' => $file['size'][$i],
+                        'tmp_name' => $file['tmp_name'][$i] ?? '',
+                        'error' => $file['error'][$i] ?? UPLOAD_ERR_NO_FILE,
+                        'size' => $file['size'][$i] ?? 0,
                     ];
                     
                     try {
                         $uploads["{$key}_{$i}"] = new self($singleFile, $options);
-                    } catch (UploadException $e) {
-                        // Continua com outros arquivos
-                        error_log("Upload error for {$key}_{$i}: " . $e->getMessage());
+                    } catch (RuntimeException $e) {
+                        error_log("Falha ao criar Upload para {$key}_{$i}: " . $e->getMessage());
                     }
                 }
             } else {
                 try {
                     $uploads[$key] = new self($file, $options);
-                } catch (UploadException $e) {
-                    error_log("Upload error for {$key}: " . $e->getMessage());
+                } catch (RuntimeException $e) {
+                    error_log("Falha ao criar Upload para {$key}: " . $e->getMessage());
                 }
             }
         }
         
         return $uploads;
-    }
-
-    /**
-     * Valida o array de dados do arquivo.
-     *
-     * @param array $file
-     * @throws InvalidArgumentException
-     */
-    private function validateFileArray(array $file): void
-    {
-        $requiredKeys = ['name', 'tmp_name', 'size', 'error'];
-        
-        foreach ($requiredKeys as $key) {
-            if (!array_key_exists($key, $file)) {
-                throw new InvalidArgumentException("Chave obrigatória '{$key}' não encontrada no array do arquivo");
-            }
-        }
-
-        if (empty($file['name'])) {
-            throw new InvalidArgumentException('Nome do arquivo não pode estar vazio');
-        }
-
-        if (empty($file['tmp_name'])) {
-            throw new InvalidArgumentException('Caminho temporário não pode estar vazio');
-        }
     }
 
     /**
@@ -571,8 +566,8 @@ class Upload
     private function initializeFileData(array $file): void
     {
         $this->file = $file;
-        $this->originalName = $this->sanitizeFilename($file['name']);
-        $this->tempPath = $file['tmp_name'];
+        $this->originalName = $this->sanitizeFilename($file['name'] ?? '');
+        $this->tempPath = $file['tmp_name'] ?? '';
         $this->size = (int) ($file['size'] ?? 0);
         $this->error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
         $this->clientMimeType = $file['type'] ?? null;
@@ -607,30 +602,28 @@ class Upload
     }
 
     /**
-     * Valida o código de erro do upload.
-     *
-     * @throws UploadException
+     * Verificações básicas de segurança no construtor.
      */
-    private function validateUploadError(): void
+    private function performBasicSecurityChecks(): void
     {
         if ($this->error !== UPLOAD_ERR_OK) {
-            throw new UploadException($this->error);
+            error_log("Upload error code: {$this->error} for file: {$this->originalName}");
+        }
+
+        if (!is_uploaded_file($this->tempPath)) {
+            error_log("Security warning: File {$this->originalName} not uploaded via POST");
         }
     }
 
     /**
-     * Realiza verificações de segurança.
+     * Realiza verificações de segurança avançadas (chamado em validate()).
      *
      * @throws RuntimeException
      */
     private function performSecurityChecks(): void
     {
         // Verifica se o arquivo temporário existe e é legível
-        if (!is_uploaded_file($this->tempPath)) {
-            throw new RuntimeException('Arquivo não foi enviado via POST ou não é seguro');
-        }
-
-        if (!is_readable($this->tempPath)) {
+        if (!file_exists($this->tempPath) || !is_readable($this->tempPath)) {
             throw new RuntimeException('Arquivo temporário não é legível');
         }
 
@@ -671,7 +664,7 @@ class Upload
 
         $realMimeType = $this->getMimeType();
         
-        if (!in_array($realMimeType, $this->allowedMimeTypes)) {
+        if (!in_array($realMimeType, $this->allowedMimeTypes, true)) {
             throw new RuntimeException(
                 "Tipo MIME '{$realMimeType}' não permitido. Tipos aceitos: " . 
                 implode(', ', $this->allowedMimeTypes)
@@ -689,12 +682,12 @@ class Upload
         $extension = $this->getExtension();
 
         // Verifica extensões proibidas
-        if (!$this->allowExecutableFiles && in_array($extension, $this->forbiddenExtensions)) {
+        if (!$this->allowExecutableFiles && in_array($extension, $this->forbiddenExtensions, true)) {
             throw new RuntimeException("Extensão '{$extension}' é proibida por motivos de segurança");
         }
 
         // Verifica extensões permitidas
-        if (!empty($this->allowedExtensions) && !in_array($extension, $this->allowedExtensions)) {
+        if (!empty($this->allowedExtensions) && !in_array($extension, $this->allowedExtensions, true)) {
             throw new RuntimeException(
                 "Extensão '{$extension}' não permitida. Extensões aceitas: " . 
                 implode(', ', $this->allowedExtensions)
@@ -748,7 +741,7 @@ class Upload
         if (count($parts) > 2) {
             // Verifica se alguma das extensões intermediárias é perigosa
             for ($i = 1; $i < count($parts) - 1; $i++) {
-                if (in_array(strtolower($parts[$i]), $this->forbiddenExtensions)) {
+                if (in_array(strtolower($parts[$i]), $this->forbiddenExtensions, true)) {
                     throw new RuntimeException('Arquivo com extensão dupla perigosa detectado');
                 }
             }
@@ -798,10 +791,10 @@ class Upload
             $extension = pathinfo($filename, PATHINFO_EXTENSION);
             $basename = pathinfo($filename, PATHINFO_FILENAME);
             $maxBasenameLength = $this->maxFilenameLength - strlen($extension) - 1;
-            $filename = substr($basename, 0, $maxBasenameLength) . '.' . $extension;
+            $filename = substr($basename, 0, $maxBasenameLength) . ($extension ? '.' . $extension : '');
         }
         
-        return $filename;
+        return $filename ?: 'unnamed';
     }
 
     /**
@@ -823,7 +816,7 @@ class Upload
 
         // Gera nome único
         $extension = $this->getExtension();
-        return uniqid('upload_', true) . '.' . $extension;
+        return uniqid('upload_', true) . ($extension ? '.' . $extension : '');
     }
 
     /**
@@ -855,7 +848,7 @@ class Upload
         $counter = 1;
 
         do {
-            $newFilename = $basename . '_' . $counter . '.' . $extension;
+            $newFilename = $basename . '_' . $counter . ($extension ? '.' . $extension : '');
             $path = rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $newFilename;
             $counter++;
         } while (file_exists($path));
