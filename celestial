@@ -1,6 +1,5 @@
 #!/usr/bin/env php
 <?php
-
 /*
 |--------------------------------------------------------------------------
 | SLENIX CLI - Ferramenta de Desenvolvimento
@@ -20,6 +19,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 use Slenix\Commands\Command;
 use Slenix\Commands\MakeCommand;
+use Slenix\Commands\ScaffoldCommand;
 use Slenix\Commands\ServeCommand;
 
 final class Celestial
@@ -43,6 +43,9 @@ final class Celestial
 
         try {
             switch ($command) {
+                case 'make:scaffold':
+                    (new ScaffoldCommand($this->args))->execute();
+                    break;
                 case 'make:model':
                     (new MakeCommand($this->args))->makeModel();
                     break;
