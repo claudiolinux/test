@@ -76,17 +76,26 @@ class ScaffoldCommand extends Command
      */
     private function setupApiScaffold(): void
     {
+        // Definir caminhos absolutos
+        $rootPath = dirname(__DIR__, 2); // Raiz do projeto (/var/www/tests/api-rest)
+        $viewsPath = $rootPath . '/views';
+        $srcPath = $rootPath . '/src';
+        $routesPath = $rootPath . '/routes';
+
         // Remove unnecessary directories/files
-        $this->removeDir(VIEWS_PATH);
-        $this->removeFile(SRC_PATH . '/Libraries/Template.php');
-        $this->removeFile(SRC_PATH . '/Libraries/Session.php');
-        $this->removeFile(SRC_PATH . '/Http/Auth/Csrf.php');
-        $this->removeFile(SRC_PATH . '/Http/Message/Upload.php');
-        $this->removeFile(ROUTES_PATH . '/web.php');
+        $this->removeDir($viewsPath);
+        $this->removeFile($srcPath . '/Libraries/Template.php');
+        $this->removeFile($srcPath . '/Libraries/Session.php');
+        $this->removeFile($srcPath . '/Http/Auth/Csrf.php');
+        $this->removeFile($srcPath . '/Http/Message/Upload.php');
+        $this->removeFile($routesPath . '/web.php');
 
         // Create routes/api.php
-        $apiRoutesPath = ROUTES_PATH . '/api.php';
+        $apiRoutesPath = $routesPath . '/api.php';
         if (!file_exists($apiRoutesPath)) {
+            if (!is_dir($routesPath)) {
+                mkdir($routesPath, 0755, true);
+            }
             $template = <<<EOT
 <?php
 /*
@@ -107,7 +116,10 @@ Router::get('/welcome', function(Request \$request, Response \$response) {
     return \$response->json(['message' => 'Welcome to Slenix API!']);
 });
 EOT;
-            file_put_contents($apiRoutesPath, $template);
+            if (file_put_contents($apiRoutesPath, $template) === false) {
+                self::error("Failed to create routes/api.php");
+                exit(1);
+            }
             self::info("Created routes/api.php");
         }
 
@@ -138,6 +150,8 @@ EOT;
         if (is_dir($dir)) {
             $this->rrmdir($dir);
             self::info("Removed directory: $dir");
+        } else {
+            self::warning("Directory not found: $dir");
         }
     }
 
@@ -152,6 +166,8 @@ EOT;
         if (file_exists($file)) {
             unlink($file);
             self::info("Removed file: $file");
+        } else {
+            self::warning("File not found: $file");
         }
     }
 
@@ -184,7 +200,8 @@ EOT;
      */
     private function updateEnvFile(string $key, string $value): void
     {
-        $envFile = ROOT_PATH . '/.env';
+        $rootPath = dirname(__DIR__, 2);
+        $envFile = $rootPath . '/.env';
         $lines = file_exists($envFile) ? file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : [];
         $newLines = [];
         $found = false;
@@ -202,7 +219,10 @@ EOT;
             $newLines[] = "$key=$value";
         }
 
-        file_put_contents($envFile, implode(PHP_EOL, $newLines) . PHP_EOL);
+        if (file_put_contents($envFile, implode(PHP_EOL, $newLines) . PHP_EOL) === false) {
+            self::error("Failed to update .env file");
+            exit(1);
+        }
         self::info("Updated .env: $key=$value");
     }
 }

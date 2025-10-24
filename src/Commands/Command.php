@@ -4,9 +4,9 @@
 | Classe Command
 |--------------------------------------------------------------------------
 |
-| Esta classe abstrata fornece funcionalidades básicas para a CLI do Slenix,
-| incluindo métodos para exibir mensagens coloridas no terminal e comandos
-| de ajuda e versão. Serve como base para outros comandos específicos.
+| Classe base para todos os comandos da CLI do Slenix.
+| Fornece métodos utilitários para exibir mensagens no terminal e acessar
+| funcionalidades do console.
 |
 */
 
@@ -16,122 +16,119 @@ namespace Slenix\Commands;
 
 use Slenix\Helpers\Console;
 
-abstract class Command {
-    
+/**
+ * Classe base para comandos da CLI do Slenix.
+ */
+abstract class Command
+{
     /**
-     * @var string Versão da CLI.
-     */
-    protected static string $version = '1.0';
-
-    /**
-     * @var string Arte ASCII para exibição no terminal.
-     */
-    protected const ASCII_ART = <<<EOT
-    ╔═╗╦  ╔═╗╦═╗╦╔═╗╦╔═╗╦═╗
-    ╚═╗║  ║  ╠╦╝║╚═╗║╠═╣╠╦╝
-    ╚═╝╩═╝╚═╝╩╚═╩╚═╝╩╩ ╩╩╚═
-    EOT;
-
-    /**
-     * Cria uma instância do Console para formatação de saída.
+     * Instância do Console para interação com o terminal.
      *
-     * @return Console
+     * @var Console
      */
-    protected static function console(): Console
+    protected static Console $console;
+
+    /**
+     * Exibe uma mensagem de informação no terminal.
+     *
+     * @param string $message Mensagem a ser exibida.
+     * @return void
+     */
+    public static function info(string $message): void
     {
-        return new Console();
+        echo self::console()->colorize("[ℹ] $message", 'green') . PHP_EOL;
     }
 
     /**
      * Exibe uma mensagem de erro no terminal.
      *
-     * @param string $message
+     * @param string $message Mensagem a ser exibida.
      * @return void
      */
     public static function error(string $message): void
     {
-        $console = self::console();
-        echo $console->colorize('[✗] ', 'red') . $console->colorize($message, 'red') . PHP_EOL;
-    }
-
-    /**
-     * Exibe uma mensagem de aviso no terminal.
-     *
-     * @param string $message
-     * @return void
-     */
-    public static function warning(string $message): void
-    {
-        $console = self::console();
-        echo $console->colorize('[!] ', 'yellow') . $console->colorize($message, 'yellow') . PHP_EOL;
+        echo self::console()->colorize("[✗] $message", 'red') . PHP_EOL;
     }
 
     /**
      * Exibe uma mensagem de sucesso no terminal.
      *
-     * @param string $message
+     * @param string $message Mensagem a ser exibida.
      * @return void
      */
     public static function success(string $message): void
     {
-        $console = self::console();
-        echo $console->colorize('[✔] ', 'green') . $console->colorize($message, 'green') . PHP_EOL;
+        echo self::console()->colorize("[✔] $message", 'green') . PHP_EOL;
     }
 
     /**
-     * Exibe uma mensagem informativa no terminal.
+     * Exibe uma mensagem de aviso no terminal.
      *
-     * @param string $message
+     * @param string $message Mensagem a ser exibida.
      * @return void
      */
-    public static function info(string $message): void
+    public static function warning(string $message): void
     {
-        $console = self::console();
-        echo $console->colorize('[ℹ] ', 'cyan') . $console->colorize($message, 'cyan') . PHP_EOL;
+        echo self::console()->colorize("[⚠] $message", 'yellow') . PHP_EOL;
     }
 
     /**
-     * Exibe a versão da CLI no terminal.
+     * Retorna a instância do Console.
+     *
+     * @return Console
+     */
+    public static function console(): Console
+    {
+        if (!isset(self::$console)) {
+            self::$console = new Console();
+        }
+        return self::$console;
+    }
+
+    /**
+     * Executa o comando.
      *
      * @return void
      */
-    public static function version(): void
-    {
-        $console = self::console();
-        echo self::ASCII_ART . PHP_EOL;
-        echo $console->colorize("Slenix CLI v" . self::$version, 'purple') . PHP_EOL;
-        echo $console->colorize('Desenvolvido com ♥ para o ecossistema Slenix', 'white') . PHP_EOL;
-    }
+    abstract public function execute(): void;
 
     /**
-     * Exibe a ajuda com a lista de comandos disponíveis.
+     * Exibe a ajuda da CLI.
      *
      * @return void
      */
     public static function help(): void
     {
-        $console = self::console();
-        echo self::ASCII_ART . PHP_EOL;
-        echo $console->colorize("Slenix CLI v" . self::$version, 'purple') . PHP_EOL;
-        echo $console->colorize('Ferramenta de desenvolvimento para o framework Slenix', 'white') . PHP_EOL . PHP_EOL;
+        $console = new Console();
+        echo $console->colorize("╔═╗╦  ╔═╗╦═╗╦╔═╗╦╔═╗╦═╗\n", 'cyan');
+        echo $console->colorize("╚═╗║  ║  ╠╦╝║╚═╗║╠═╣╠╦╝\n", 'cyan');
+        echo $console->colorize("╚═╝╩═╝╚═╝╩╚═╩╚═╝╩╩ ╩╩╚═\n", 'cyan');
+        echo $console->colorize("Slenix CLI v1.0\n", 'green');
+        echo "Ferramenta de desenvolvimento para o framework Slenix\n\n";
+        echo "Uso:\n  php celestial <comando> [opções]\n\n";
+        echo "Comandos disponíveis:\n";
+        echo "  make:scaffold <api|full> Configura o projeto como API ou full-stack\n";
+        echo "  make:model <nome>      Cria um novo model\n";
+        echo "  make:controller <nome> Cria um novo controller\n";
+        echo "  make:middleware <nome> Cria um novo middleware\n";
+        echo "  serve [porta]         Inicia o servidor de desenvolvimento\n";
+        echo "  route:list            Lista todas as rotas registradas\n";
+        echo "  help                 Exibe esta ajuda\n";
+        echo "  version              Exibe a versão da CLI\n";
+        echo "\nExemplos:\n";
+        echo "  php celestial make:scaffold api\n";
+        echo "  php celestial make:model User\n";
+        echo "  php celestial make:controller Home\n";
+        echo "  php celestial serve 8000\n";
+    }
 
-        echo $console->colorize('Uso:', 'white', true) . PHP_EOL;
-        echo "  php celestial <comando> [opções]" . PHP_EOL . PHP_EOL;
-
-        echo $console->colorize('Comandos disponíveis:', 'white', true) . PHP_EOL;
-        echo "  " . $console->colorize('make:scaffold <api|full>', 'green') . " Configura o projeto como API ou full-stack" . PHP_EOL;
-        echo "  " . $console->colorize('make:model <nome>', 'green') . "      Cria um novo model" . PHP_EOL;
-        echo "  " . $console->colorize('make:controller <nome>', 'green') . " Cria um novo controller" . PHP_EOL;
-        echo "  " . $console->colorize('make:middleware <nome>', 'green') . " Cria um novo middleware" . PHP_EOL;
-        echo "  " . $console->colorize('serve [porta]', 'green') . "         Inicia o servidor de desenvolvimento" . PHP_EOL;
-        echo "  " . $console->colorize('route:list', 'green') . "            Lista todas as rotas registradas" . PHP_EOL;
-        echo "  " . $console->colorize('help', 'green') . "                 Exibe esta ajuda" . PHP_EOL;
-        echo "  " . $console->colorize('version', 'green') . "              Exibe a versão da CLI" . PHP_EOL . PHP_EOL;
-
-        echo $console->colorize('Exemplos:', 'white', true) . PHP_EOL;
-        echo "  " . $console->colorize('php celestial make:scaffold api', 'cyan') . PHP_EOL;
-        echo "  " . $console->colorize('php celestial make:model User', 'cyan') . PHP_EOL;
-        echo "  " . $console->colorize('php celestial make:controller Home', 'cyan') . PHP_EOL;
-        echo "  " . $console->colorize('php celestial serve 8000', 'cyan') . PHP_EOL;
+    /**
+     * Exibe a versão da CLI.
+     *
+     * @return void
+     */
+    public static function version(): void
+    {
+        echo "Slenix CLI v1.0\n";
     }
 }
