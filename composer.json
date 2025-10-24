@@ -1,5 +1,5 @@
 {
-    "name": "test/slenix",
+    "name": "claudiolinux/slenix",
     "description": "Slenix é um micro framework flexível para construir APIs REST e aplicações web",
     "keywords": ["slenix", "microframework"],
     "homepage": "https://github.com/claudiovictors/slenix",
