@@ -1,13 +1,26 @@
 <?php
+/*
+|--------------------------------------------------------------------------
+| Classe Console
+|--------------------------------------------------------------------------
+|
+| Esta classe fornece funcionalidades para interagir com o terminal, incluindo
+| formatação de texto com cores ANSI e prompts interativos para entrada do usuário.
+| Usada pela CLI do Slenix para exibir mensagens e coletar inputs.
+|
+*/
 
 declare(strict_types=1);
 
 namespace Slenix\Helpers;
 
+/**
+ * Classe para manipulação de saídas e entradas no terminal.
+ */
 class Console
 {
     /**
-     * Cores para estilizar as saídas no terminal
+     * Cores para estilizar as saídas no terminal.
      *
      * @var array
      */
@@ -21,7 +34,7 @@ class Console
         'cyan' => '0;36',
         'white' => '0;37',
     ];
-    
+
     /**
      * Aplica cores e formatação ao texto para exibição na linha de comando.
      *
@@ -42,5 +55,20 @@ class Console
         }
 
         return "\033[{$code}m{$text}\033[0m";
+    }
+
+    /**
+     * Exibe um prompt no terminal e coleta a entrada do usuário.
+     *
+     * @param string $prompt O texto do prompt a ser exibido.
+     * @param string $default O valor padrão caso o usuário não insira nada.
+     * @return string A entrada do usuário ou o valor padrão.
+     */
+    public function ask(string $prompt, string $default = ''): string
+    {
+        $prompt = $this->colorize($prompt, 'cyan');
+        echo $prompt;
+        $input = trim(fgets(STDIN));
+        return $input !== '' ? $input : $default;
     }
 }
