@@ -1,16 +1,16 @@
 {
     "name": "claudiolinux/slenix",
-    "description": "Slenix é um micro framework flexível para construir APIs REST e aplicações web",
-    "keywords": ["slenix", "microframework"],
-    "homepage": "https://github.com/claudiovictors/slenix",
+    "description": "Slenix é um micro framework flexível para construir APIs REST e aplicações web (versão de teste)",
+    "keywords": ["slenix", "microframework", "test"],
+    "homepage": "https://github.com/claudiolinux/test",
     "type": "project",
     "license": "MIT",
     "authors": [
         {
             "name": "Cláudio Victor",
-            "email": "barrosclaudio147@gmail.com",
+            "email": "claudiodev147@gmail.com",
             "role": "Developer",
-            "homepage": "https://github.com/claudiovictors"
+            "homepage": "https://github.com/claudiolinux"
         }
     ],
     "require": {
@@ -25,8 +25,8 @@
             "src/Helpers/Helpers.php"
         ]
     },
-    "minimum-stability": "stable",
-    "prefer-stable": true,
+    "minimum-stability": "dev",
+    "prefer-stable": false,
     "scripts": {
         "post-create-project-cmd": [
             "php celestial make:scaffold",
@@ -38,8 +38,8 @@
         "sort-packages": true
     },
     "support": {
-        "email": "barrosclaudio147@gmail.com",
-        "issues": "https://github.com/claudiovictors/slenix/issues",
-        "source": "https://github.com/claudiovictors/slenix"
+        "email": "claudiodev147@gmail.com",
+        "issues": "https://github.com/claudiolinux/test/issues",
+        "source": "https://github.com/claudiolinux/test"
     }
 }

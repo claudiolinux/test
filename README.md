@@ -2,7 +2,7 @@
   <img src="public/logo.svg" alt="Slenix Logo" width="250">
 </p>
 
-<h1 align="center">🌌 Slenix Framework</h1>
+<h1 align="center">🌌 Slenix Framework demo</h1>
 
 <p align="center">Um micro framework PHP leve, elegante e poderoso baseado no padrão MVC.</p>
 
